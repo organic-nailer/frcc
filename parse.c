@@ -25,6 +25,15 @@ bool consume(char* op) {
     return true;
 }
 
+Token* consume_identity() {
+    if(token->kind != TK_IDENTITY || 'a' > token->str[0] || token->str[0] > 'z') {
+        return NULL;
+    }
+    Token* ret = token;
+    token = token->next;
+    return ret;
+}
+
 void expect(char* op) {
     if(token->kind != TK_RESERVED
         || strlen(op) != token->length 
@@ -36,7 +45,7 @@ void expect(char* op) {
 
 int expect_number() {
     if(token->kind != TK_NUM) {
-        error_at(token->str, "数ではありません");
+        error_at(token->str, "数ではありません %d", token->kind);
     }
     int value = token->value;
     token = token->next;
@@ -60,7 +69,7 @@ bool start_with(char* p, char* q) {
     return memcmp(p, q, strlen(q)) == 0;
 }
 
-Token *tokenize(char *p) {
+void tokenize(char *p) {
     Token head;
     head.next = NULL;
     Token *cur = &head;
@@ -75,8 +84,12 @@ Token *tokenize(char *p) {
             p += 2;
             continue;
         }
-        if(*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' || *p == '<' || *p == '>') {
+        if(*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '=') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
+            continue;
+        }
+        if('a' <= *p && *p <= 'z') {
+            cur = new_token(TK_IDENTITY, cur, p++, 1);
             continue;
         }
         if(isdigit(*p)) {
@@ -87,7 +100,7 @@ Token *tokenize(char *p) {
         error_at(p, "tokenize出来ません");
     }
     new_token(TK_EOF, cur, p, 0);
-    return head.next;
+    token = head.next;
 }
 
 //*********構文解析***********
@@ -107,74 +120,45 @@ Node *new_node_num(int value) {
     return node;
 }
 
-Node* expr();
-Node* mul();
-Node* primary();
-Node* unary();
-Node* equality();
-Node* relational();
-Node* add();
+Node* code[100];
 
-//expr ::= equality
+//program ::= stmt*
+Node* stmt(); //::= expr ";"
+Node* expr(); //::= assign
+Node* assign(); //::= equality ( "=" assign)?
+Node* equality(); //::= relational ("==" relational | "!=" relational)*
+Node* relational(); //::= relational ::= add ("<" add | "<=" add | ">" add | ">=" add)*
+Node* add(); //::= mul ( "+" mul | "-" mul )*
+Node* mul(); //::= unary ( "*" unary | "/" unary )*
+Node* unary(); //::= ("+" | "-")? primary
+Node* primary(); //:: num | identity | "(" expr ")"
+
+void program() {
+    int i = 0;
+    while(!at_eof()) {
+        code[i++] = stmt();
+    }
+    code[i] = NULL;
+}
+
+Node* stmt() {
+    Node* node = expr();
+    expect(";");
+    return node;
+}
+
 Node* expr() {
-    return equality();
+    return assign();
 }
 
-//add ::= mul ( "+" mul | "-" mul )*
-Node *add() {
-    Node *node = mul();
-
-    for(;;) {
-        if(consume("+")) {
-            node = new_node(ND_ADD, node, mul());
-        }
-        else if(consume("-")) {
-            node = new_node(ND_SUB, node, mul());
-        }
-        else {
-            return node;
-        }
+Node* assign() {
+    Node* node = equality();
+    if(consume("=")) {
+        node = new_node(ND_ASSIGN, node, assign());
     }
+    return node;
 }
 
-//mul ::= unary ( "*" unary | "/" unary )*
-Node *mul() {
-    Node *node = unary();
-    for(;;) {
-        if(consume("*")) {
-            node = new_node(ND_MUL, node, unary());
-        }
-        else if(consume("/")) {
-            node = new_node(ND_DIV, node, unary());
-        }
-        else {
-            return node;
-        }
-    }
-}
-
-//primary ::= num | "(" expr ")"
-Node *primary() {
-    if(consume("(")) {
-        Node *node = expr();
-        expect(")");
-        return node;
-    }
-    return new_node_num(expect_number());
-}
-
-//unary = ("+" | "-")? primary
-Node *unary() {
-    if(consume("+")) {
-        return primary();
-    }
-    if(consume("-")) {
-        return new_node(ND_SUB, new_node_num(0), primary());
-    }
-    return primary();
-}
-
-//equality ::= relational ("==" relational | "!=" relational)*
 Node* equality() {
     Node *node = relational();
     for(;;) {
@@ -190,7 +174,6 @@ Node* equality() {
     }
 }
 
-//relational ::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* relational() {
     Node *node = add();
     for(;;) {
@@ -210,4 +193,61 @@ Node* relational() {
             return node;
         }
     }
+}
+
+Node *add() {
+    Node *node = mul();
+
+    for(;;) {
+        if(consume("+")) {
+            node = new_node(ND_ADD, node, mul());
+        }
+        else if(consume("-")) {
+            node = new_node(ND_SUB, node, mul());
+        }
+        else {
+            return node;
+        }
+    }
+}
+
+Node *mul() {
+    Node *node = unary();
+    for(;;) {
+        if(consume("*")) {
+            node = new_node(ND_MUL, node, unary());
+        }
+        else if(consume("/")) {
+            node = new_node(ND_DIV, node, unary());
+        }
+        else {
+            return node;
+        }
+    }
+}
+
+Node *unary() {
+    if(consume("+")) {
+        return primary();
+    }
+    if(consume("-")) {
+        return new_node(ND_SUB, new_node_num(0), primary());
+    }
+    return primary();
+}
+
+Node *primary() {
+    if(consume("(")) {
+        Node *node = expr();
+        expect(")");
+        return node;
+    }
+    Token* tok = consume_identity();
+    if(tok) {
+        Node* node = calloc(1, sizeof(Node));
+        node->kind = ND_LVAR;
+        node->offset = (tok->str[0] - 'a' + 1) * 8;
+        return node;
+    }
+    return new_node_num(expect_number());
 }

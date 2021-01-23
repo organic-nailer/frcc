@@ -10,6 +10,7 @@
 //トークンの種類
 typedef enum {
     TK_RESERVED,
+    TK_IDENTITY,
     TK_NUM,
     TK_EOF,
 } TokenKind;
@@ -28,7 +29,7 @@ extern Token *token;
 
 extern char *user_input;
 
-Token *tokenize(char *p);
+void tokenize(char *p);
 
 //*********構文解析***********
 
@@ -41,7 +42,9 @@ typedef enum {
     ND_EQ,
     ND_NEQ,
     ND_LT,
-    ND_LTE
+    ND_LTE,
+    ND_ASSIGN,
+    ND_LVAR,
 } NodeKind;
 
 typedef struct Node Node;
@@ -51,9 +54,11 @@ struct Node {
     Node *left;
     Node *right;
     int value;
+    int offset; //変数の格納場所
 };
 
-Node* expr();
+extern Node* code[100];
+void program();
 
 //**********コード生成***********
 
