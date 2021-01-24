@@ -48,5 +48,6 @@ assert() {
 assert 0 "0;"
 assert 4 "(3+5)/+2;"
 assert 4 "a=3;(a+5)/+2;"
+assert 4 "hoge=3;fuga=2+hoge;(hoge+fuga)/+2;"
 
 echo OK

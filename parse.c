@@ -89,7 +89,14 @@ void tokenize(char *p) {
             continue;
         }
         if('a' <= *p && *p <= 'z') {
-            cur = new_token(TK_IDENTITY, cur, p++, 1);
+            int idLength = 0;
+            char* cp = p;
+            while('a' <= *cp && *cp <= 'z') {
+                idLength++;
+                cp++;
+            }
+            cur = new_token(TK_IDENTITY, cur, p, idLength);
+            p += idLength;
             continue;
         }
         if(isdigit(*p)) {
@@ -104,6 +111,26 @@ void tokenize(char *p) {
 }
 
 //*********構文解析***********
+
+typedef struct LVar LVar;
+
+struct LVar {
+    LVar *next;
+    char *name;
+    int length;
+    int offset;
+};
+
+LVar *locals;
+
+LVar* find_lvar(Token* tok) {
+    for(LVar* var = locals; var; var = var->next) {
+        if(var->length == tok->length && !memcmp(tok->str, var->name, var->length)) {
+            return var;
+        }
+    }
+    return NULL;
+}
 
 Node *new_node(NodeKind kind, Node *left, Node *right) {
     Node *node = calloc(1, sizeof(Node));
@@ -134,6 +161,7 @@ Node* unary(); //::= ("+" | "-")? primary
 Node* primary(); //:: num | identity | "(" expr ")"
 
 void program() {
+    locals = calloc(1, sizeof(LVar));
     int i = 0;
     while(!at_eof()) {
         code[i++] = stmt();
@@ -246,8 +274,27 @@ Node *primary() {
     if(tok) {
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_LVAR;
-        node->offset = (tok->str[0] - 'a' + 1) * 8;
+
+        LVar* lvar = find_lvar(tok);
+        if(lvar) {
+            node->offset = lvar->offset;
+        }
+        else {
+            lvar = calloc(1, sizeof(LVar));
+            lvar->next = locals;
+            lvar->name = tok->str;
+            lvar->length = tok->length;
+            lvar->offset = locals->offset+8;
+            node->offset = lvar->offset;
+            locals = lvar;
+        }
         return node;
     }
+    // if(tok) {
+    //     Node* node = calloc(1, sizeof(Node));
+    //     node->kind = ND_LVAR;
+    //     node->offset = (tok->str[0] - 'a' + 1) * 8;
+    //     return node;
+    // }
     return new_node_num(expect_number());
 }
