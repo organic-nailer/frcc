@@ -25,6 +25,14 @@ bool consume(char* op) {
     return true;
 }
 
+bool consume_return() {
+    if(token->kind != TK_RETURN) {
+        return false;
+    }
+    token = token->next;
+    return true;
+}
+
 Token* consume_identity() {
     if(token->kind != TK_IDENTITY || 'a' > token->str[0] || token->str[0] > 'z') {
         return NULL;
@@ -69,6 +77,13 @@ bool start_with(char* p, char* q) {
     return memcmp(p, q, strlen(q)) == 0;
 }
 
+int is_alnum(char c) {
+    return ('a' <= c && c <= 'z')
+        || ('A' <= c && c <= 'Z')
+        || ('0' <= c && c <= '9')
+        || (c == '_');
+}
+
 void tokenize(char *p) {
     Token head;
     head.next = NULL;
@@ -86,6 +101,11 @@ void tokenize(char *p) {
         }
         if(*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '=') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
+            continue;
+        }
+        if(strncmp(p, "return", 6) == 0 && !is_alnum(p[6])) {
+            cur = new_token(TK_RETURN, cur, p, 1);
+            p += 6;
             continue;
         }
         if('a' <= *p && *p <= 'z') {
@@ -150,7 +170,7 @@ Node *new_node_num(int value) {
 Node* code[100];
 
 //program ::= stmt*
-Node* stmt(); //::= expr ";"
+Node* stmt(); //::= expr ";" | "return" expr ";"
 Node* expr(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
@@ -170,8 +190,18 @@ void program() {
 }
 
 Node* stmt() {
-    Node* node = expr();
-    expect(";");
+    Node* node;
+    if(consume_return()) {
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_RETURN;
+        node->left = expr();
+    }
+    else {
+        node = expr();
+    }
+    if(!consume(";")) {
+        error_at(token->str, "';'ではないトークンです");
+    }
     return node;
 }
 
