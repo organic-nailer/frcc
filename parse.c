@@ -25,8 +25,8 @@ bool consume(char* op) {
     return true;
 }
 
-bool consume_return() {
-    if(token->kind != TK_RETURN) {
+bool consume_token(TokenKind kind) {
+    if(token->kind != kind) {
         return false;
     }
     token = token->next;
@@ -47,6 +47,13 @@ void expect(char* op) {
         || strlen(op) != token->length 
         || memcmp(token->str, op, token->length)) {
         error_at(token->str, "'%s'ではありません", op);
+    }
+    token = token->next;
+}
+
+void expect_token(TokenKind kind) {
+    if(token->kind != kind) {
+        error_at(token->str, "TK_%dではありません", kind);
     }
     token = token->next;
 }
@@ -104,8 +111,28 @@ void tokenize(char *p) {
             continue;
         }
         if(strncmp(p, "return", 6) == 0 && !is_alnum(p[6])) {
-            cur = new_token(TK_RETURN, cur, p, 1);
+            cur = new_token(TK_RETURN, cur, p, 6);
             p += 6;
+            continue;
+        }
+        if(strncmp(p, "if", 2) == 0 && !is_alnum(p[2])) {
+            cur = new_token(TK_IF, cur, p, 2);
+            p += 2;
+            continue;
+        }
+        if(strncmp(p, "else", 4) == 0 && !is_alnum(p[4])) {
+            cur = new_token(TK_ELSE, cur, p, 4);
+            p += 4;
+            continue;
+        }
+        if(strncmp(p, "while", 5) == 0 && !is_alnum(p[5])) {
+            cur = new_token(TK_WHILE, cur, p, 5);
+            p += 5;
+            continue;
+        }
+        if(strncmp(p, "for", 3) == 0 && !is_alnum(p[3])) {
+            cur = new_token(TK_FOR, cur, p, 3);
+            p += 3;
             continue;
         }
         if('a' <= *p && *p <= 'z') {
@@ -167,18 +194,41 @@ Node *new_node_num(int value) {
     return node;
 }
 
+void print_node(Node* node, int indent) {
+    char tabs[indent+1];
+    for(int i = 0; i < indent; i++) {
+        tabs[i] = '\t';
+    }
+    tabs[indent] = NULL;
+    if(node) {
+        log_print("%s node: %d\n", tabs, node->kind);
+        if(node->left) {
+            log_print("%s left:\n", tabs);
+            print_node(node->left, indent+1);
+        }
+        if(node->right) {
+            log_print("%s right:\n", tabs);
+            print_node(node->right, indent+1);
+        }
+    }
+}
+
 Node* code[100];
 
 //program ::= stmt*
-Node* stmt(); //::= expr ";" | "return" expr ";"
-Node* expr(); //::= assign
+Node* stmt(); //::= expression ";" 
+                            // | "return" expression ";"
+                            // | "if" "(" expression ")" stmt ("else" stmt)?
+                            // | "while" "(" expression ")" stmt
+                            // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
+Node* expression(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= relational ::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
 Node* unary(); //::= ("+" | "-")? primary
-Node* primary(); //:: num | identity | "(" expr ")"
+Node* primary(); //:: num | identity | "(" expression ")"
 
 void program() {
     locals = calloc(1, sizeof(LVar));
@@ -191,21 +241,61 @@ void program() {
 
 Node* stmt() {
     Node* node;
-    if(consume_return()) {
+    if(consume_token(TK_RETURN)) {
         node = calloc(1, sizeof(Node));
         node->kind = ND_RETURN;
-        node->left = expr();
+        node->left = expression();
+        if(!consume(";")) {
+            error_at(token->str, "';'ではないトークンです");
+        }
+    }
+    else if(consume_token(TK_IF)) {
+        expect("(");
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_IF_ELSE;
+        node->condition = expression();
+        expect(")");
+        node->then = stmt();
+        if(consume_token(TK_ELSE)) {
+            node->els = stmt();
+        }
+    }
+    else if(consume_token(TK_WHILE)) {
+        expect("(");
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_WHILE;
+        node->condition = expression();
+        expect(")");
+        node->body = stmt();
+    }
+    else if(consume_token(TK_FOR)) {
+        expect("(");
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_FOR;
+        if(!consume(";")) {
+            node->initialize = expression();
+            expect(";");
+        }
+        if(!consume(";")) {
+            node->condition = expression();
+            expect(";");
+        }
+        if(!consume(")")) {
+            node->increment = expression();
+            expect(")");
+        }
+        node->body = stmt();
     }
     else {
-        node = expr();
-    }
-    if(!consume(";")) {
-        error_at(token->str, "';'ではないトークンです");
+        node = expression();
+        if(!consume(";")) {
+            error_at(token->str, "';'ではないトークンです");
+        }
     }
     return node;
 }
 
-Node* expr() {
+Node* expression() {
     return assign();
 }
 
@@ -296,7 +386,7 @@ Node *unary() {
 
 Node *primary() {
     if(consume("(")) {
-        Node *node = expr();
+        Node *node = expression();
         expect(")");
         return node;
     }

@@ -45,11 +45,14 @@ assert() {
 # assert 1 '1>=1'
 # assert 0 '1>=2'
 
-assert 0 "0;"
-assert 4 "(3+5)/+2;"
-assert 4 "a=3;(a+5)/+2;"
-assert 4 "hoge=3;fuga=2+hoge;(hoge+fuga)/+2;"
-assert 4 "hoge=3;fuga=2+hoge;return (hoge+fuga)/+2; 2;"
-assert 2 "hoge=2;return hoge;"
+# assert 0 "0;"
+# assert 4 "(3+5)/+2;"
+# assert 4 "a=3;(a+5)/+2;"
+# assert 4 "hoge=3;fuga=2+hoge;(hoge+fuga)/+2;"
+# assert 4 "hoge=3;fuga=2+hoge;return (hoge+fuga)/+2; 2;"
+# assert 2 "hoge=2;return hoge;"
+assert 5 "hoge=2;while(hoge < 5) hoge = hoge+1; return hoge;"
+assert 7 "hoge=2;for(i=0;i<5;i=i+1) hoge=hoge+1; return hoge;"
+assert 1 "hoge=2;if(hoge==2) return 1;return 2;"
 
 echo OK

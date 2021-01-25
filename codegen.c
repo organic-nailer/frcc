@@ -10,7 +10,10 @@ void gen_lval(Node* node) {
     printf("push rax\n");
 }
 
+int labelUnique = 0;
+
 void gen(Node* node) {
+    int uniq = labelUnique++;
     switch(node->kind) {
         case ND_NUM:
             printf("push %d\n", node->value);
@@ -35,6 +38,46 @@ void gen(Node* node) {
             printf("mov rsp, rbp\n");
             printf("pop rbp\n");
             printf("ret\n");
+            return;
+        case ND_IF_ELSE:
+            gen(node->condition);
+            printf("pop rax\n");
+            printf("cmp rax, 0\n");
+            if(node->els) {
+                printf("je .Lelse%d\n", uniq);
+                gen(node->then);
+                printf("jmp .Lend%d\n", uniq);
+                printf(".Lelse%d:\n", uniq);
+                gen(node->els);
+                printf(".Lend%d:\n", uniq);
+            }
+            else {
+                printf("je .Lend%d\n", uniq);
+                gen(node->then);
+                printf(".Lend%d:\n", uniq);
+            }
+            return;
+        case ND_WHILE:
+            printf(".Lbegin%d:\n", uniq);
+            gen(node->condition);
+            printf("pop rax\n");
+            printf("cmp rax, 0\n");
+            printf("je .Lend%d\n", uniq);
+            gen(node->body);
+            printf("jmp .Lbegin%d\n", uniq);
+            printf(".Lend%d:\n", uniq);
+            return;
+        case ND_FOR:
+            gen(node->initialize);
+            printf(".Lbegin%d:\n", uniq);
+            gen(node->condition);
+            printf("pop rax\n");
+            printf("cmp rax, 0\n");
+            printf("je .Lend%d\n", uniq);
+            gen(node->body);
+            gen(node->increment);
+            printf("jmp .Lbegin%d\n", uniq);
+            printf(".Lend%d:\n", uniq);
             return;
     }
 

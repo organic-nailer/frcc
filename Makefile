@@ -11,6 +11,6 @@ test: frcc
 		./test.sh
 
 clean:
-		rm -f frcc *.o *~ tmp*
+		rm -f frcc *.o *~ tmp* log/*
 
 .PHONY: test clean
