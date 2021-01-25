@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "vector.h"
+
 //**********LOG***********
 
 void open_logger();
@@ -60,6 +62,7 @@ typedef enum {
     ND_IF_ELSE,
     ND_WHILE,
     ND_FOR,
+    ND_BLOCK,
 } NodeKind;
 
 typedef struct Node Node;
@@ -74,6 +77,7 @@ struct Node {
     Node *initialize;
     Node *increment;
     Node *body;
+    Vector* stmts;
 
     int value;
     int offset; //変数の格納場所

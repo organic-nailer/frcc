@@ -106,7 +106,9 @@ void tokenize(char *p) {
             p += 2;
             continue;
         }
-        if(*p == '+' || *p == '-' || *p == '*' || *p == '/' || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '=') {
+        if(*p == '+' || *p == '-' || *p == '*' || *p == '/' 
+            || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '='
+            || *p == '{' || *p == '}') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
@@ -217,6 +219,7 @@ Node* code[100];
 
 //program ::= stmt*
 Node* stmt(); //::= expression ";" 
+                            // | "{" stmt* "}"
                             // | "return" expression ";"
                             // | "if" "(" expression ")" stmt ("else" stmt)?
                             // | "while" "(" expression ")" stmt
@@ -241,7 +244,15 @@ void program() {
 
 Node* stmt() {
     Node* node;
-    if(consume_token(TK_RETURN)) {
+    if(consume("{")) {
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_BLOCK;
+        node->stmts = calloc(1, sizeof(Vector));
+        for(int i = 0; !consume("}") && i < 100; i++) {
+            vec_push(node->stmts, stmt());
+        }
+    }
+    else if(consume_token(TK_RETURN)) {
         node = calloc(1, sizeof(Node));
         node->kind = ND_RETURN;
         node->left = expression();

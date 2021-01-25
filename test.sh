@@ -54,5 +54,6 @@ assert() {
 assert 5 "hoge=2;while(hoge < 5) hoge = hoge+1; return hoge;"
 assert 7 "hoge=2;for(i=0;i<5;i=i+1) hoge=hoge+1; return hoge;"
 assert 1 "hoge=2;if(hoge==2) return 1;return 2;"
+assert 3 "{ 1; 2; 3; }"
 
 echo OK
