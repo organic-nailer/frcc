@@ -108,7 +108,7 @@ void tokenize(char *p) {
         }
         if(*p == '+' || *p == '-' || *p == '*' || *p == '/' 
             || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '='
-            || *p == '{' || *p == '}') {
+            || *p == '{' || *p == '}' || *p == ',') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
@@ -161,15 +161,6 @@ void tokenize(char *p) {
 
 //*********構文解析***********
 
-typedef struct LVar LVar;
-
-struct LVar {
-    LVar *next;
-    char *name;
-    int length;
-    int offset;
-};
-
 LVar *locals;
 
 LVar* find_lvar(Token* tok) {
@@ -212,12 +203,49 @@ void print_node(Node* node, int indent) {
             log_print("%s right:\n", tabs);
             print_node(node->right, indent+1);
         }
+        if(node->condition) {
+            log_print("%s condition:\n", tabs);
+            print_node(node->condition, indent+1);
+        }
+        if(node->then) {
+            log_print("%s then:\n", tabs);
+            print_node(node->then, indent+1);
+        }
+        if(node->els) {
+            log_print("%s els:\n", tabs);
+            print_node(node->els, indent+1);
+        }
+        if(node->initialize) {
+            log_print("%s initialize:\n", tabs);
+            print_node(node->initialize, indent+1);
+        }
+        if(node->increment) {
+            log_print("%s increment:\n", tabs);
+            print_node(node->increment, indent+1);
+        }
+        if(node->body) {
+            log_print("%s body:\n", tabs);
+            print_node(node->body, indent+1);
+        }
+        if(node->stmts) {
+            log_print("%s stmts:\n", tabs);
+            for(int i = 0; i < node->stmts->length; i++) {
+                print_node(node->stmts->data[i], indent+1);
+            }
+        }
+        if(node->args) {
+            log_print("%s args:\n", tabs);
+            for(int i = 0; i < node->args->length; i++) {
+                print_node(node->args->data[i], indent+1);
+            }
+        }
     }
 }
 
-Node* code[100];
+Function* code[100];
 
-//program ::= stmt*
+//program ::= function*
+Function* function(); //::= identity "(" ( identity, ( "," identity )* )? ")" "{" stmt* "}"
 Node* stmt(); //::= expression ";" 
                             // | "{" stmt* "}"
                             // | "return" expression ";"
@@ -231,15 +259,52 @@ Node* relational(); //::= relational ::= add ("<" add | "<=" add | ">" add | ">=
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
 Node* unary(); //::= ("+" | "-")? primary
-Node* primary(); //:: num | identity | "(" expression ")"
+Node* primary(); //::= num 
+                                    // | identity ( "(" ( expression ( "," expression )* )? ")" )?
+                                    // | "(" expression ")"
 
 void program() {
-    locals = calloc(1, sizeof(LVar));
     int i = 0;
     while(!at_eof()) {
-        code[i++] = stmt();
+        code[i++] = function();
     }
     code[i] = NULL;
+}
+
+Function* function() {
+    Token* tok = consume_identity();
+    if(!tok) error_at(tok->str, "トップレベルは関数が必要です");
+    Function* func = calloc(1, sizeof(Function));
+    func->name = tok->str;
+    func->name_length = tok->length;
+    expect("(");
+    if(!consume(")")) {
+       func->locals =  calloc(1, sizeof(LVar));
+       Token* identity = consume_identity();
+       func->locals->name = identity->str;
+       func->locals->length = identity->length;
+       func->arg_size++;
+        while(consume(",")) {
+            LVar* var = calloc(1, sizeof(LVar));
+            Token* t = consume_identity();
+            var->name = t->str;
+            var->length = t->length;
+            var->offset = func->locals->offset + 8;
+            var->next = func->locals;
+            func->locals = var;
+            func->arg_size++;
+        }
+        expect(")");
+    }
+    expect("{");
+    Node* node = calloc(1, sizeof(Node));
+    node->kind = ND_BLOCK;
+    node->stmts = calloc(1, sizeof(Vector));
+    for(int i = 0; !consume("}"); i++) {
+        vec_push(node->stmts, stmt());
+    }
+    func->node = node;
+    return func;
 }
 
 Node* stmt() {
@@ -404,28 +469,37 @@ Node *primary() {
     Token* tok = consume_identity();
     if(tok) {
         Node* node = calloc(1, sizeof(Node));
-        node->kind = ND_LVAR;
-
-        LVar* lvar = find_lvar(tok);
-        if(lvar) {
-            node->offset = lvar->offset;
+        if(consume("(")) {
+            if(!consume(")")) {
+                node->args =  calloc(1, sizeof(Vector));
+                vec_push(node->args, expression());
+                while(consume(",")) {
+                    vec_push(node->args, expression());
+                }
+                expect(")");
+            }
+            node->kind = ND_FUNCTION_CALL;
+            node->str = tok->str;
+            node->str_length = tok->length;
         }
         else {
-            lvar = calloc(1, sizeof(LVar));
-            lvar->next = locals;
-            lvar->name = tok->str;
-            lvar->length = tok->length;
-            lvar->offset = locals->offset+8;
-            node->offset = lvar->offset;
-            locals = lvar;
+            node->kind = ND_LVAR;
+
+            LVar* lvar = find_lvar(tok);
+            if(lvar) {
+                node->offset = lvar->offset;
+            }
+            else {
+                lvar = calloc(1, sizeof(LVar));
+                lvar->next = locals;
+                lvar->name = tok->str;
+                lvar->length = tok->length;
+                lvar->offset = locals->offset+8;
+                node->offset = lvar->offset;
+                locals = lvar;
+            }
         }
         return node;
     }
-    // if(tok) {
-    //     Node* node = calloc(1, sizeof(Node));
-    //     node->kind = ND_LVAR;
-    //     node->offset = (tok->str[0] - 'a' + 1) * 8;
-    //     return node;
-    // }
     return new_node_num(expect_number());
 }

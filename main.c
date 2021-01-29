@@ -28,26 +28,16 @@ int main(int argc, char **argv) {
     program();
     log_print("parsed\n");
     for(int i = 0; code[i]; i++) {
-        print_node(code[i], 0);
+        print_node(code[i]->node, 0);
     }
     log_print("\n\n");
     close_logger();
 
     printf(".intel_syntax noprefix\n");
     printf(".globl main\n");
-    printf("main:\n");
-
-    printf("push rbp\n");
-    printf("mov rbp, rsp\n");
-    printf("sub rsp, 208\n");
-    
     for(int i =0; code[i]; i++) {
         gen(code[i]);
         printf("pop rax\n");
     }
-
-    printf("mov rsp, rbp\n");
-    printf("pop rbp\n");
-    printf("ret\n");
     return 0;
 }

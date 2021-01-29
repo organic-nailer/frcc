@@ -47,22 +47,24 @@ void tokenize(char *p);
 //*********構文解析***********
 
 typedef enum {
-    ND_ADD,
-    ND_SUB,
-    ND_MUL,
-    ND_DIV,
-    ND_NUM,
-    ND_EQ,
-    ND_NEQ,
-    ND_LT,
-    ND_LTE,
-    ND_ASSIGN,
-    ND_LVAR,
-    ND_RETURN,
-    ND_IF_ELSE,
-    ND_WHILE,
-    ND_FOR,
-    ND_BLOCK,
+    ND_ADD, //0
+    ND_SUB, //1
+    ND_MUL, //2
+    ND_DIV, //3
+    ND_NUM, //4
+    ND_EQ, //5
+    ND_NEQ, //6
+    ND_LT, //7
+    ND_LTE, //8
+    ND_ASSIGN, //9
+    ND_LVAR, //10
+    ND_RETURN,//11
+    ND_IF_ELSE,//12
+    ND_WHILE,//13
+    ND_FOR,//14
+    ND_BLOCK,//15
+    ND_FUNCTION_CALL,//16
+    ND_FUNCTION_IMPL,//17
 } NodeKind;
 
 typedef struct Node Node;
@@ -78,16 +80,39 @@ struct Node {
     Node *increment;
     Node *body;
     Vector* stmts;
+    Vector* args;
 
+    char* str;
+    int str_length;
     int value;
     int offset; //変数の格納場所
 };
 
 void print_node(Node* node, int indent);
 
-extern Node* code[100];
 void program();
+
+typedef struct LVar LVar;
+
+struct LVar {
+    LVar *next;
+    char *name;
+    int length;
+    int offset;
+};
+
+typedef struct Function Function;
+
+struct Function {
+    char* name;
+    int name_length;
+    Node* node;
+    LVar* locals;
+    int arg_size;
+};
+
+extern Function* code[100];
 
 //**********コード生成***********
 
-void gen(Node* node);
+void gen(Function* func);

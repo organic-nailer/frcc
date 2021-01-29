@@ -4,7 +4,7 @@ assert() {
     input="$2"
 
     ./frcc "$input" > tmp.s
-    cc -o tmp tmp.s
+    cc -o tmp tmp.s test1.o
     ./tmp
     actual="$?"
 
@@ -51,9 +51,14 @@ assert() {
 # assert 4 "hoge=3;fuga=2+hoge;(hoge+fuga)/+2;"
 # assert 4 "hoge=3;fuga=2+hoge;return (hoge+fuga)/+2; 2;"
 # assert 2 "hoge=2;return hoge;"
-assert 5 "hoge=2;while(hoge < 5) hoge = hoge+1; return hoge;"
-assert 7 "hoge=2;for(i=0;i<5;i=i+1) hoge=hoge+1; return hoge;"
-assert 1 "hoge=2;if(hoge==2) return 1;return 2;"
-assert 3 "{ 1; 2; 3; }"
+# assert 5 "hoge=2;while(hoge < 5) hoge = hoge+1; return hoge;"
+# assert 7 "hoge=2;for(i=0;i<5;i=i+1) hoge=hoge+1; return hoge;"
+# assert 1 "hoge=2;if(hoge==2) return 1;return 2;"
+# assert 3 "{ 1; 2; 3; }"
+# assert 3 "hoge=2;foo();return hoge+1;"
+# assert 3 "hoge=2;return hoge+1;"
+
+assert 1 "main() { return 1; }"
+assert 2 "foo() { return 1; } main() { return foo() + 1; }"
 
 echo OK
