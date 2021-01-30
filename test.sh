@@ -58,7 +58,12 @@ assert() {
 # assert 3 "hoge=2;foo();return hoge+1;"
 # assert 3 "hoge=2;return hoge+1;"
 
-assert 1 "main() { return 1; }"
+# assert 1 "main() { return 1; }"
 assert 2 "foo() { return 1; } main() { return foo() + 1; }"
+assert 3 "main() { x = 3; y = x; return y; }"
+assert 3 "main() { x = 3; y = &x; return *y; }"
+assert 5 "main() { x = 3; y = 5; z = &y; return *z; }"
+assert 3 "main() { x = 3; y = 5; z = &x; return *z; }"
+assert 3 "main() { x = 3; y = 5; z = &y + 8; return *z; }"
 
 echo OK

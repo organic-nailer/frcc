@@ -126,6 +126,15 @@ void gen_node(Node* node) {
             printf("call %.*s\n", node->str_length, node->str);
             printf("push rax\n");
             return;
+        case ND_ADDR:
+            gen_lval(node->left);
+            return;
+        case ND_DEREF:
+            gen_node(node->left);
+            printf("pop rax\n");
+            printf("mov rax, [rax]\n");
+            printf("push rax\n");
+            return;
     }
 
     gen_node(node->left);

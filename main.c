@@ -29,6 +29,11 @@ int main(int argc, char **argv) {
     log_print("parsed\n");
     for(int i = 0; code[i]; i++) {
         print_node(code[i]->node, 0);
+        LVar* loc = code[i]->locals;
+        while(loc) {
+            log_print("%.*s :%d\n", loc->length, loc->name, loc->offset);
+            loc = loc->next;
+        }
     }
     log_print("\n\n");
     close_logger();

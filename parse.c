@@ -108,7 +108,7 @@ void tokenize(char *p) {
         }
         if(*p == '+' || *p == '-' || *p == '*' || *p == '/' 
             || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '='
-            || *p == '{' || *p == '}' || *p == ',') {
+            || *p == '{' || *p == '}' || *p == ',' || *p == '&') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
@@ -161,10 +161,10 @@ void tokenize(char *p) {
 
 //*********構文解析***********
 
-LVar *locals;
+LVar* local;
 
 LVar* find_lvar(Token* tok) {
-    for(LVar* var = locals; var; var = var->next) {
+    for(LVar* var = local; var; var = var->next) {
         if(var->length == tok->length && !memcmp(tok->str, var->name, var->length)) {
             return var;
         }
@@ -239,6 +239,9 @@ void print_node(Node* node, int indent) {
                 print_node(node->args->data[i], indent+1);
             }
         }
+        if(node->offset) {
+            log_print("%s offset: %d\n", tabs, node->offset);
+        }
     }
 }
 
@@ -258,7 +261,10 @@ Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= relational ::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
-Node* unary(); //::= ("+" | "-")? primary
+Node* unary(); //::= "+"? primary
+                                // | "-"? primary
+                                // | "*" unary
+                                // | "&" unary
 Node* primary(); //::= num 
                                     // | identity ( "(" ( expression ( "," expression )* )? ")" )?
                                     // | "(" expression ")"
@@ -295,6 +301,11 @@ Function* function() {
             func->arg_size++;
         }
         expect(")");
+        local = func->locals;
+    }
+    else {
+        func->locals = calloc(1, sizeof(LVar));
+        local = func->locals;
     }
     expect("{");
     Node* node = calloc(1, sizeof(Node));
@@ -304,6 +315,7 @@ Function* function() {
         vec_push(node->stmts, stmt());
     }
     func->node = node;
+    func->locals = local;
     return func;
 }
 
@@ -457,6 +469,18 @@ Node *unary() {
     if(consume("-")) {
         return new_node(ND_SUB, new_node_num(0), primary());
     }
+    if(consume("*")) {
+        Node* node = calloc(1, sizeof(Node));
+        node->kind = ND_DEREF;
+        node->left = unary();
+        return node;
+    }
+    if(consume("&")) {
+        Node* node = calloc(1, sizeof(Node));
+        node->kind = ND_ADDR;
+        node->left = unary();
+        return node;
+    }
     return primary();
 }
 
@@ -491,12 +515,12 @@ Node *primary() {
             }
             else {
                 lvar = calloc(1, sizeof(LVar));
-                lvar->next = locals;
+                lvar->next = local;
                 lvar->name = tok->str;
                 lvar->length = tok->length;
-                lvar->offset = locals->offset+8;
+                lvar->offset = local->offset+8;
                 node->offset = lvar->offset;
-                locals = lvar;
+                local = lvar;
             }
         }
         return node;
