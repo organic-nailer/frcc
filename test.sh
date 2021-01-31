@@ -59,11 +59,21 @@ assert() {
 # assert 3 "hoge=2;return hoge+1;"
 
 # assert 1 "main() { return 1; }"
-assert 2 "foo() { return 1; } main() { return foo() + 1; }"
-assert 3 "main() { x = 3; y = x; return y; }"
-assert 3 "main() { x = 3; y = &x; return *y; }"
-assert 5 "main() { x = 3; y = 5; z = &y; return *z; }"
-assert 3 "main() { x = 3; y = 5; z = &x; return *z; }"
-assert 3 "main() { x = 3; y = 5; z = &y + 8; return *z; }"
+# assert 2 "foo() { return 1; } main() { return foo() + 1; }"
+# assert 3 "main() { x = 3; y = x; return y; }"
+# assert 3 "main() { x = 3; y = &x; return *y; }"
+# assert 5 "main() { x = 3; y = 5; z = &y; return *z; }"
+# assert 3 "main() { x = 3; y = 5; z = &x; return *z; }"
+# assert 3 "main() { x = 3; y = 5; z = &y + 8; return *z; }"
+
+# assert 2 "int foo() { return 1; } int main() { return foo() + 1; }"
+assert 3 "int main() { int x; int y; x = 3; y = x; return y; }"
+assert 3 "int main() { int x; int y; x = 3; y = &x; return *y; }"
+assert 5 "int main() { int x; int yoo; x = 3; yoo = 5; return yoo; }"
+assert 5 "int main() { int x; int yoo; x = 3; yoo = 5; int z; z = &yoo; return *z; }"
+assert 5 "int main() { int x; int y; x = 3; y = 5; int z; z = &y; return *z; }"
+assert 3 "int main() { int x; int y; int z; x = 3; y = 5; z = &x; return *z; }"
+assert 3 "int main() { int x; int y; int z; x = 3; y = 5; z = &y + 8; return *z; }"
+assert 3 "int foo(int x, int y) { return x+y; } int main() { return foo(1,2); }"
 
 echo OK

@@ -135,7 +135,12 @@ void gen_node(Node* node) {
             printf("mov rax, [rax]\n");
             printf("push rax\n");
             return;
+        case ND_VAR_DEF:
+            printf("push rax\n"); //無意味だけどスタックになんか残さないといけないので
+            return;
     }
+
+    if(node->kind >= 100 || node->kind < 0) return;
 
     gen_node(node->left);
     gen_node(node->right);

@@ -26,6 +26,7 @@ typedef enum {
     TK_WHILE,
     TK_FOR,
     TK_EOF,
+    TK_INT,
 } TokenKind;
 
 typedef struct Token Token;
@@ -67,6 +68,7 @@ typedef enum {
     ND_FUNCTION_IMPL,//17
     ND_ADDR, //18
     ND_DEREF, //19
+    ND_VAR_DEF, //20
 } NodeKind;
 
 typedef struct Node Node;

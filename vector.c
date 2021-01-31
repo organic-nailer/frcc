@@ -21,7 +21,7 @@ void vec_push_i(Vector* v, int value) {
 }
 
 void* vec_pop(Vector* v) {
-    return v->data[--(v->length)];
+    return v->data[--v->length];
 }
 
 void* vec_last(Vector* v) {
