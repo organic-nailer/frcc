@@ -247,10 +247,11 @@ void gen(Function* func) {
     }
     int local_length = 0;
     LVar* loc = func->locals;
-    while(loc) {
-        local_length += 8;
-        loc = loc->next;
-    }
+    local_length = loc->offset;
+    // while(loc) {
+    //     local_length = loc->offset;
+    //     loc = loc->next;
+    // }
     int offset = fit16(local_length);
     printf("sub rsp, %d\n", offset);
     gen_node(func->node);

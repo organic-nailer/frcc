@@ -52,8 +52,9 @@ void tokenize(char *p);
 typedef struct Type Type;
 
 struct Type {
-    enum { INT, PTR } typ;
+    enum { INT, PTR, ARRAY } typ;
     struct Type *ptr_to;
+    size_t array_size;
 };
 
 typedef enum {

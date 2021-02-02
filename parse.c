@@ -108,7 +108,8 @@ void tokenize(char *p) {
         }
         if(*p == '+' || *p == '-' || *p == '*' || *p == '/' 
             || *p == '(' || *p == ')' || *p == '<' || *p == '>' || *p == ';' || *p == '='
-            || *p == '{' || *p == '}' || *p == ',' || *p == '&') {
+            || *p == '{' || *p == '}' || *p == ',' || *p == '&'
+            || *p == '[' || *p == ']') {
             cur = new_token(TK_RESERVED, cur, p++, 1);
             continue;
         }
@@ -277,28 +278,29 @@ void print_node(Node* node, int indent) {
 Function* code[100];
 
 //program ::= function*
-Function* function(); //::= "int" "*"* identity "(" ( "int" "*"* identity, ( "," "int" "*"* identity )* )? ")" "{" stmt* "}"
+Function* function(); //::= 
+        //"int" "*"* identity "(" ( "int" "*"* identity, ( "," "int" "*"* identity )* )? ")" "{" stmt* "}"
 Node* stmt(); //::= expression ";" 
-                            // | "{" stmt* "}"
-                            // | "return" expression ";"
-                            // | "if" "(" expression ")" stmt ("else" stmt)?
-                            // | "while" "(" expression ")" stmt
-                            // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
+            // | "{" stmt* "}"
+            // | "return" expression ";"
+            // | "if" "(" expression ")" stmt ("else" stmt)?
+            // | "while" "(" expression ")" stmt
+            // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
 Node* expression(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
-                // | "int" "*"* identity
+                // | "int" "*"* identity ("[" num "]")?
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
-Node* unary(); //::= "+"? primary
+Node* unary(bool u_amp, bool u_sizeof); //::= "+"? primary
                 // | "-"? primary
                 // | "*" unary
                 // | "&" unary
                 // | "sizeof" unary
-Node* primary(); //::= num 
-                                    // | identity ( "(" ( expression ( "," expression )* )? ")" )?
-                                    // | "(" expression ")"
+Node* primary(bool u_amp, bool u_sizeof); //::= num 
+                // | identity ( "(" ( expression ( "," expression )* )? ")" )?
+                // | "(" expression ")"
 
 void program() {
     int i = 0;
@@ -321,12 +323,13 @@ Function* function() {
     if(!consume(")")) {
         expect_token(TK_INT);
         Type* tp = expect_type();
+        int width = 8;
        
         Token* identity = consume_identity();
         LVar* var = calloc(1, sizeof(LVar));
         var->name = identity->str;
         var->length = identity->length;
-        var->offset = local->offset + 8;
+        var->offset = local->offset + width;
         var->next = local;
         var->typ = tp;
         local = var;
@@ -334,11 +337,12 @@ Function* function() {
         while(consume(",")) {
             expect_token(TK_INT);
             tp = expect_type();
+            width = 8;
             var = calloc(1, sizeof(LVar));
             Token* t = consume_identity();
             var->name = t->str;
             var->length = t->length;
-            var->offset = local->offset + 8;
+            var->offset = local->offset + width;
             var->next = local;
             var->typ = tp;
             local = var;
@@ -434,13 +438,23 @@ Node* assign() {
         if(!tok) {
             error_at(token->str, "宣言ミス");
         }
+        int width = 8;
+        if(consume("[")) {
+            Type* type_array = calloc(1, sizeof(Type));
+            type_array->typ = ARRAY;
+            type_array->array_size = expect_number();
+            type_array->ptr_to = tp;
+            tp = type_array;
+            width *= type_array->array_size;
+            expect("]");
+        }
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_VAR_DEF;
         LVar* lvar = calloc(1, sizeof(LVar));
         lvar->next = local;
         lvar->name = tok->str;
         lvar->length = tok->length;
-        lvar->offset = local->offset+8;
+        lvar->offset = local->offset + width;
         lvar->typ = tp;
         node->offset = lvar->offset;
         local = lvar;
@@ -544,10 +558,10 @@ Node *add() {
 }
 
 Node *mul() {
-    Node *node = unary();
+    Node *node = unary(false, false);
     for(;;) {
         if(consume("*")) {
-            node = new_node(ND_MUL, node, unary());
+            node = new_node(ND_MUL, node, unary(false, false));
             if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
                 node->typ->typ = INT;
             }
@@ -556,7 +570,7 @@ Node *mul() {
             }
         }
         else if(consume("/")) {
-            node = new_node(ND_DIV, node, unary());
+            node = new_node(ND_DIV, node, unary(false, false));
             if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
                 node->typ->typ = INT;
             }
@@ -570,12 +584,12 @@ Node *mul() {
     }
 }
 
-Node *unary() {
+Node *unary(bool u_amp, bool u_sizeof) {
     if(consume("+")) {
-        return primary();
+        return primary(false, false);
     }
     if(consume("-")) {
-        Node* node = new_node(ND_SUB, new_node_num(0), primary());
+        Node* node = new_node(ND_SUB, new_node_num(0), primary(false, false));
         node->typ = calloc(1, sizeof(Type));
         node->typ->typ = INT;
         return node;
@@ -583,28 +597,38 @@ Node *unary() {
     if(consume("*")) {
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_DEREF;
-        node->left = unary();
+        node->left = unary(false, false);
         node->typ = node->left->typ->ptr_to;
         return node;
     }
     if(consume("&")) {
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_ADDR;
-        node->left = unary();
+        node->left = unary(true, false);
         node->typ = calloc(1, sizeof(Type));
         node->typ->ptr_to = node->left->typ;
         node->typ->typ = PTR;
         return node;
     }
     if(consume_token(TK_SIZEOF)) {
-        Node* node = unary();
-        int width = node->typ->typ == INT ? 4 : 8;
+        Node* node = unary(false, true);
+        int width;
+        if(node->typ->typ == INT) {
+            width = 4;
+        }
+        else if(node->typ->typ == PTR) {
+            width = 8;
+        }
+        else if(node->typ->typ == ARRAY) {
+            int in_width = node->typ->ptr_to->typ == INT ? 4 : 8;
+            width = in_width * node->typ->array_size;
+        }
         return new_node_num(width);
     }
-    return primary();
+    return primary(u_amp, u_sizeof);
 }
 
-Node *primary() {
+Node *primary(bool u_amp, bool u_sizeof) {
     if(consume("(")) {
         Node *node = expression();
         expect(")");
@@ -632,7 +656,14 @@ Node *primary() {
             LVar* lvar = find_lvar(tok);
             if(lvar) {
                 node->offset = lvar->offset;
-                node->typ = lvar->typ;
+                if(lvar->typ->typ == ARRAY && !u_amp && !u_sizeof) {
+                    node->typ = calloc(1, sizeof(Type));
+                    node->typ->typ = PTR;
+                    node->typ->ptr_to = lvar->typ->ptr_to;
+                }
+                else {
+                    node->typ = lvar->typ;
+                }
             }
             else {
                 error_at(tok->str, "不明な識別子です");

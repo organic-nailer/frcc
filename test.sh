@@ -68,16 +68,17 @@ assert() {
 
 # assert 2 "int foo() { return 1; } int main() { return foo() + 1; }"
 assert 3 "int main() { int x; int y; x = 3; y = x; return y; }"
-assert 3 "int main() { int x; int y; x = 3; y = &x; return *y; }"
+assert 3 "int main() { int x; int* y; x = 3; y = &x; return *y; }"
 assert 5 "int main() { int x; int yoo; x = 3; yoo = 5; return yoo; }"
-assert 5 "int main() { int x; int yoo; x = 3; yoo = 5; int z; z = &yoo; return *z; }"
-assert 5 "int main() { int x; int y; x = 3; y = 5; int z; z = &y; return *z; }"
-assert 3 "int main() { int x; int y; int z; x = 3; y = 5; z = &x; return *z; }"
-assert 3 "int main() { int x; int y; int z; x = 3; y = 5; z = &y + 2; return *z; }"
+assert 5 "int main() { int x; int yoo; x = 3; yoo = 5; int* z; z = &yoo; return *z; }"
+assert 5 "int main() { int x; int y; x = 3; y = 5; int* z; z = &y; return *z; }"
+assert 3 "int main() { int x; int y; int* z; x = 3; y = 5; z = &x; return *z; }"
+assert 3 "int main() { int x; int y; int* z; x = 3; y = 5; z = &y + 2; return *z; }"
 assert 3 "int foo(int x, int y) { return x+y; } int main() { return foo(1,2); }"
 assert 3 "int main() {int x; int *y; y=&x; *y=3; return x;}"
 assert 4 "int main() {int x; return sizeof(x);}"
 assert 8 "int main() {int *x; return sizeof(x);}"
 assert 4 "int main() {return sizeof(1);}"
+assert 3 "int main() {int a[2]; *a=1; *(a+1)=2; int *p; p=a; return *p+*(p+1);}"
 
 echo OK
