@@ -142,6 +142,11 @@ void tokenize(char *p) {
             p += 3;
             continue;
         }
+        if(strncmp(p, "sizeof", 6) == 0 && !is_alnum(p[6])) {
+            cur = new_token(TK_SIZEOF, cur, p, 6);
+            p += 6;
+            continue;
+        }
         if('a' <= *p && *p <= 'z') {
             int idLength = 0;
             char* cp = p;
@@ -203,6 +208,8 @@ Node *new_node_num(int value) {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_NUM;
     node->value = value;
+    node->typ = calloc(1, sizeof(Type));
+    node->typ->typ = INT;
     return node;
 }
 
@@ -214,6 +221,9 @@ void print_node(Node* node, int indent) {
     tabs[indent] = NULL;
     if(node) {
         log_print("%s node: %d\n", tabs, node->kind);
+        if(node->typ) {
+            log_print("%s type: %d\n", tabs, node->typ->typ);
+        }
         if(node->left) {
             log_print("%s left:\n", tabs);
             print_node(node->left, indent+1);
@@ -276,15 +286,16 @@ Node* stmt(); //::= expression ";"
                             // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
 Node* expression(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
-                                // | "int" "*"* identity
+                // | "int" "*"* identity
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
 Node* unary(); //::= "+"? primary
-                                // | "-"? primary
-                                // | "*" unary
-                                // | "&" unary
+                // | "-"? primary
+                // | "*" unary
+                // | "&" unary
+                // | "sizeof" unary
 Node* primary(); //::= num 
                                     // | identity ( "(" ( expression ( "," expression )* )? ")" )?
                                     // | "(" expression ")"
@@ -438,6 +449,7 @@ Node* assign() {
     Node* node = equality();
     if(consume("=")) {
         node = new_node(ND_ASSIGN, node, assign());
+        node->typ = node->left->typ;
     }
     return node;
 }
@@ -447,9 +459,13 @@ Node* equality() {
     for(;;) {
         if(consume("==")) {
             node = new_node(ND_EQ, node, relational());
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else if(consume("!=")) {
             node = new_node(ND_NEQ, node, relational());
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else {
             return node;
@@ -462,15 +478,23 @@ Node* relational() {
     for(;;) {
         if(consume("<")) {
             node = new_node(ND_LT, node, add());
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else if(consume("<=")) {
             node = new_node(ND_LTE, node, add());
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else if(consume(">")) {
             node = new_node(ND_LT, add(), node);
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else if(consume(">=")) {
             node = new_node(ND_LTE, add(), node);
+            node->typ = calloc(1, sizeof(Type));
+            node->typ = INT;
         }
         else {
             return node;
@@ -484,9 +508,34 @@ Node *add() {
     for(;;) {
         if(consume("+")) {
             node = new_node(ND_ADD, node, mul());
+            node->typ = calloc(1, sizeof(Type));
+            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+                node->typ->typ = INT;
+            }
+            else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
+                error_at(token->str, "ポインタ同士の演算は無効です");
+            }
+            else if(node->left->typ->typ == PTR) {
+                node->typ = node->left->typ;
+            }
+            else if(node->right->typ->typ = PTR) {
+                node->typ = node->right->typ;
+            }
         }
         else if(consume("-")) {
             node = new_node(ND_SUB, node, mul());
+            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+                node->typ->typ = INT;
+            }
+            else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
+                error_at(token->str, "ポインタ同士の演算は無効です");
+            }
+            else if(node->left->typ->typ == PTR) {
+                node->typ = node->left->typ;
+            }
+            else if(node->right->typ->typ = PTR) {
+                error_at(token->str, "マイナスの右辺にポインタ");
+            }
         }
         else {
             return node;
@@ -499,9 +548,21 @@ Node *mul() {
     for(;;) {
         if(consume("*")) {
             node = new_node(ND_MUL, node, unary());
+            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+                node->typ->typ = INT;
+            }
+            else {
+                error_at(token->str, "無効な演算");
+            }
         }
         else if(consume("/")) {
             node = new_node(ND_DIV, node, unary());
+            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+                node->typ->typ = INT;
+            }
+            else {
+                error_at(token->str, "無効な演算");
+            }
         }
         else {
             return node;
@@ -514,19 +575,31 @@ Node *unary() {
         return primary();
     }
     if(consume("-")) {
-        return new_node(ND_SUB, new_node_num(0), primary());
+        Node* node = new_node(ND_SUB, new_node_num(0), primary());
+        node->typ = calloc(1, sizeof(Type));
+        node->typ->typ = INT;
+        return node;
     }
     if(consume("*")) {
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_DEREF;
         node->left = unary();
+        node->typ = node->left->typ->ptr_to;
         return node;
     }
     if(consume("&")) {
         Node* node = calloc(1, sizeof(Node));
         node->kind = ND_ADDR;
         node->left = unary();
+        node->typ = calloc(1, sizeof(Type));
+        node->typ->ptr_to = node->left->typ;
+        node->typ->typ = PTR;
         return node;
+    }
+    if(consume_token(TK_SIZEOF)) {
+        Node* node = unary();
+        int width = node->typ->typ == INT ? 4 : 8;
+        return new_node_num(width);
     }
     return primary();
 }
