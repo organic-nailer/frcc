@@ -293,11 +293,12 @@ Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
-Node* unary(bool u_amp, bool u_sizeof); //::= "+"? primary
-                // | "-"? primary
+Node* unary(bool u_amp, bool u_sizeof); //::= "+"? postfix
+                // | "-"? postfix
                 // | "*" unary
                 // | "&" unary
                 // | "sizeof" unary
+Node* postfix(bool u_amp, bool u_sizeof); //::= primary ("[" expression "]")?
 Node* primary(bool u_amp, bool u_sizeof); //::= num 
                 // | identity ( "(" ( expression ( "," expression )* )? ")" )?
                 // | "(" expression ")"
@@ -586,10 +587,10 @@ Node *mul() {
 
 Node *unary(bool u_amp, bool u_sizeof) {
     if(consume("+")) {
-        return primary(false, false);
+        return postfix(false, false);
     }
     if(consume("-")) {
-        Node* node = new_node(ND_SUB, new_node_num(0), primary(false, false));
+        Node* node = new_node(ND_SUB, new_node_num(0), postfix(false, false));
         node->typ = calloc(1, sizeof(Type));
         node->typ->typ = INT;
         return node;
@@ -625,7 +626,34 @@ Node *unary(bool u_amp, bool u_sizeof) {
         }
         return new_node_num(width);
     }
-    return primary(u_amp, u_sizeof);
+    return postfix(u_amp, u_sizeof);
+}
+
+Node *postfix(bool u_amp, bool u_sizeof) {
+    Node *left = primary(u_amp, u_sizeof);
+    if(consume("[")) {
+        Node *node = new_node(ND_ADD, left, expression());
+        node->typ = calloc(1, sizeof(Type));
+        if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+            error_at(token->str, "[]内外のどちらかはポインタの必要が");
+        }
+        else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
+            error_at(token->str, "ポインタ同士の演算は無効です");
+        }
+        else if(node->left->typ->typ == PTR) {
+            node->typ = node->left->typ;
+        }
+        else if(node->right->typ->typ = PTR) {
+            node->typ = node->right->typ;
+        }
+        Node *node2 = calloc(1, sizeof(Node));
+        node2->kind = ND_DEREF;
+        node2->left = node;
+        node2->typ = node->typ->ptr_to;
+        left = node2;
+        expect("]");
+    }
+    return left;
 }
 
 Node *primary(bool u_amp, bool u_sizeof) {
