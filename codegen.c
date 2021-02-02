@@ -1,17 +1,17 @@
 #include "frcc.h"
 
-void gen_node(Node* node);
+Type* gen_node(Node* node);
 
-void gen_lval(Node* node) {
+Type* gen_lval(Node* node) {
     if(node->kind == ND_DEREF) {
-        gen_node(node->left);
-        return;
+        Type* tp = gen_node(node->left);
+        return tp->ptr_to;
     }
     if(node->kind == ND_LVAR) {
         printf("mov rax, rbp\n");
         printf("sub rax, %d\n", node->offset);
         printf("push rax\n");
-        return;
+        return node->typ;
     }
     fprintf(stderr, "代入の左辺値が変数ではありません\n");
     exit(1);
@@ -23,18 +23,20 @@ int fit16(int x) {
 
 int labelUnique = 0;
 
-void gen_node(Node* node) {
+Type* gen_node(Node* node) {
     int uniq = labelUnique++;
+    Type* ret_type = calloc(1, sizeof(Type));
     switch(node->kind) {
         case ND_NUM:
             printf("push %d\n", node->value);
-            return;
+            ret_type->typ = INT;
+            return ret_type;
         case ND_LVAR:
             gen_lval(node);
             printf("pop rax\n");
             printf("mov rax, [rax]\n");
             printf("push rax\n");
-            return;
+            return node->typ;
         case ND_ASSIGN:
             gen_lval(node->left);
             gen_node(node->right);
@@ -42,14 +44,14 @@ void gen_node(Node* node) {
             printf("pop rax\n");
             printf("mov [rax], rdi\n");
             printf("push rdi\n");
-            return;
+            return NULL;
         case ND_RETURN:
             gen_node(node->left);
             printf("pop rax\n");
             printf("mov rsp, rbp\n");
             printf("pop rbp\n");
             printf("ret\n");
-            return;
+            return NULL;
         case ND_IF_ELSE:
             gen_node(node->condition);
             printf("pop rax\n");
@@ -67,7 +69,7 @@ void gen_node(Node* node) {
                 gen_node(node->then);
                 printf(".Lend%d:\n", uniq);
             }
-            return;
+            return NULL;
         case ND_WHILE:
             printf(".Lbegin%d:\n", uniq);
             gen_node(node->condition);
@@ -77,7 +79,7 @@ void gen_node(Node* node) {
             gen_node(node->body);
             printf("jmp .Lbegin%d\n", uniq);
             printf(".Lend%d:\n", uniq);
-            return;
+            return NULL;
         case ND_FOR:
             gen_node(node->initialize);
             printf(".Lbegin%d:\n", uniq);
@@ -89,14 +91,14 @@ void gen_node(Node* node) {
             gen_node(node->increment);
             printf("jmp .Lbegin%d\n", uniq);
             printf(".Lend%d:\n", uniq);
-            return;
+            return NULL;
         case ND_BLOCK:
             for(int i = 0; i < node->stmts->length; i++) {
                 gen_node(node->stmts->data[i]);
                 printf("pop rax\n");
             }
             printf("push rax\n");
-            return;
+            return NULL;
         case ND_FUNCTION_CALL:
             if(node->args && node->args->length) {
                 if(node->args->length >= 1) {
@@ -132,61 +134,94 @@ void gen_node(Node* node) {
             //printf("sub rsp, 16\n");
             printf("call %.*s\n", node->str_length, node->str);
             printf("push rax\n");
-            return;
+            return NULL; //TODO: 関数の返り値の型を返す
         case ND_ADDR:
-            gen_lval(node->left);
-            return;
+            ret_type->typ = PTR;
+            ret_type->ptr_to = gen_lval(node->left);
+            return ret_type;
         case ND_DEREF:
-            gen_node(node->left);
+            ret_type = gen_node(node->left);
             printf("pop rax\n");
             printf("mov rax, [rax]\n");
             printf("push rax\n");
-            return;
+            return ret_type->ptr_to;
         case ND_VAR_DEF:
             printf("push rax\n"); //無意味だけどスタックになんか残さないといけないので
-            return;
+            return NULL;
     }
 
-    gen_node(node->left);
-    gen_node(node->right);
+    Type* type_left = gen_node(node->left);
+    Type* type_right = gen_node(node->right);
 
     printf("pop rdi\n");
     printf("pop rax\n");
 
-    switch(node->kind) {
-        case ND_ADD:
+    if(type_left->typ == INT && type_right->typ == INT) {
+        switch(node->kind) {
+            case ND_ADD:
+                printf("add rax, rdi\n");
+                break;
+            case ND_SUB:
+                printf("sub rax, rdi\n");
+                break;
+            case ND_MUL:
+                printf("imul rax, rdi\n");
+                break;
+            case ND_DIV:
+                printf("cqo\n");
+                printf("idiv rdi\n");
+                break;
+            case ND_EQ:
+                printf("cmp rax, rdi\n");
+                printf("sete al\n");
+                printf("movzb rax, al\n");
+                break;
+            case ND_NEQ:
+                printf("cmp rax, rdi\n");
+                printf("setne al\n");
+                printf("movzb rax, al\n");
+                break;
+            case ND_LT:
+                printf("cmp rax, rdi\n");
+                printf("setl al\n");
+                printf("movzb rax, al\n");
+                break;
+            case ND_LTE:
+                printf("cmp rax, rdi\n");
+                printf("setle al\n");
+                printf("movzb rax, al\n");
+                break;
+        }
+    }
+    else if(type_left->typ == INT && type_right->typ == PTR) {
+        int width = type_right->ptr_to->typ == INT ? 4 : 8;
+        if(node->kind == ND_ADD) {
+            printf("imul rax, %d\n", width);
             printf("add rax, rdi\n");
-            break;
-        case ND_SUB:
+        }
+        else {
+            fprintf(stderr, "無効な演算 nd:%d\n", node->kind);
+            exit(1);
+        }
+    }
+    else if(type_left->typ == PTR && type_right->typ == INT) {
+        int width = type_left->ptr_to->typ == INT ? 4 : 8;
+        if(node->kind == ND_ADD) {
+            printf("imul rdi, %d\n", width);
+            printf("add rax, rdi\n");
+        }
+        else if(node->kind == ND_SUB) {
+            printf("imul rdi, %d\n", width);
             printf("sub rax, rdi\n");
-            break;
-        case ND_MUL:
-            printf("imul rax, rdi\n");
-            break;
-        case ND_DIV:
-            printf("cqo\n");
-            printf("idiv rdi\n");
-            break;
-        case ND_EQ:
-            printf("cmp rax, rdi\n");
-            printf("sete al\n");
-            printf("movzb rax, al\n");
-            break;
-        case ND_NEQ:
-            printf("cmp rax, rdi\n");
-            printf("setne al\n");
-            printf("movzb rax, al\n");
-            break;
-        case ND_LT:
-            printf("cmp rax, rdi\n");
-            printf("setl al\n");
-            printf("movzb rax, al\n");
-            break;
-        case ND_LTE:
-            printf("cmp rax, rdi\n");
-            printf("setle al\n");
-            printf("movzb rax, al\n");
-            break;
+        }
+        else {
+            fprintf(stderr, "無効な演算 nd:%d\n", node->kind);
+            exit(1);
+        }
+    }
+    else {
+        fprintf(stderr, "ポインタ同士の演算\n");
+        exit(1);
     }
     printf("push rax\n");
 }
