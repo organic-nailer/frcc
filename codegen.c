@@ -1,13 +1,20 @@
 #include "frcc.h"
 
+void gen_node(Node* node);
+
 void gen_lval(Node* node) {
-    if(node->kind != ND_LVAR) {
-        fprintf(stderr, "代入の左辺値が変数ではありません\n");
-        exit(1);
+    if(node->kind == ND_DEREF) {
+        gen_node(node->left);
+        return;
     }
-    printf("mov rax, rbp\n");
-    printf("sub rax, %d\n", node->offset);
-    printf("push rax\n");
+    if(node->kind == ND_LVAR) {
+        printf("mov rax, rbp\n");
+        printf("sub rax, %d\n", node->offset);
+        printf("push rax\n");
+        return;
+    }
+    fprintf(stderr, "代入の左辺値が変数ではありません\n");
+    exit(1);
 }
 
 int fit16(int x) {
@@ -139,8 +146,6 @@ void gen_node(Node* node) {
             printf("push rax\n"); //無意味だけどスタックになんか残さないといけないので
             return;
     }
-
-    if(node->kind >= 100 || node->kind < 0) return;
 
     gen_node(node->left);
     gen_node(node->right);

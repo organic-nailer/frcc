@@ -47,6 +47,14 @@ void tokenize(char *p);
 
 //*********構文解析***********
 
+
+typedef struct Type Type;
+
+struct Type {
+    enum { INT, PTR } typ;
+    struct Type *ptr_to;
+};
+
 typedef enum {
     ND_ADD, //0
     ND_SUB, //1
@@ -90,6 +98,7 @@ struct Node {
     int str_length;
     int value;
     int offset; //変数の格納場所
+    Type *typ;
 };
 
 void print_node(Node* node, int indent);
@@ -103,6 +112,7 @@ struct LVar {
     char *name;
     int length;
     int offset;
+    Type *typ;
 };
 
 typedef struct Function Function;

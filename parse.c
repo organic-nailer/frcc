@@ -177,6 +177,20 @@ LVar* find_lvar(Token* tok) {
     return NULL;
 }
 
+Type* expect_type() {
+    Type* ret = calloc(1, sizeof(Type));
+    Type* tp = calloc(1, sizeof(Type));
+    tp->typ = INT;
+    ret = tp;
+    while(consume("*")) {
+        tp = calloc(1, sizeof(Type));
+        tp->typ = PTR;
+        tp->ptr_to = ret;
+        ret = tp;
+    }
+    return ret;
+}
+
 Node *new_node(NodeKind kind, Node *left, Node *right) {
     Node *node = calloc(1, sizeof(Node));
     node->kind = kind;
@@ -253,7 +267,7 @@ void print_node(Node* node, int indent) {
 Function* code[100];
 
 //program ::= function*
-Function* function(); //::= "int" identity "(" ( "int" identity, ( "," "int" identity )* )? ")" "{" stmt* "}"
+Function* function(); //::= "int" "*"* identity "(" ( "int" "*"* identity, ( "," "int" "*"* identity )* )? ")" "{" stmt* "}"
 Node* stmt(); //::= expression ";" 
                             // | "{" stmt* "}"
                             // | "return" expression ";"
@@ -262,9 +276,9 @@ Node* stmt(); //::= expression ";"
                             // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
 Node* expression(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
-                                // | "int" identity
+                                // | "int" "*"* identity
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
-Node* relational(); //::= relational ::= add ("<" add | "<=" add | ">" add | ">=" add)*
+Node* relational(); //::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
 Node* mul(); //::= unary ( "*" unary | "/" unary )*
 Node* unary(); //::= "+"? primary
@@ -295,23 +309,27 @@ Function* function() {
     local = func->locals;
     if(!consume(")")) {
         expect_token(TK_INT);
+        Type* tp = expect_type();
        
-       Token* identity = consume_identity();
-       LVar* var = calloc(1, sizeof(LVar));
-       var->name = identity->str;
-       var->length = identity->length;
-       var->offset = local->offset + 8;
-       var->next = local;
-       local = var;
-       func->arg_size++;
+        Token* identity = consume_identity();
+        LVar* var = calloc(1, sizeof(LVar));
+        var->name = identity->str;
+        var->length = identity->length;
+        var->offset = local->offset + 8;
+        var->next = local;
+        var->typ = tp;
+        local = var;
+        func->arg_size++;
         while(consume(",")) {
             expect_token(TK_INT);
+            tp = expect_type();
             var = calloc(1, sizeof(LVar));
             Token* t = consume_identity();
             var->name = t->str;
             var->length = t->length;
             var->offset = local->offset + 8;
             var->next = local;
+            var->typ = tp;
             local = var;
             func->arg_size++;
         }
@@ -400,6 +418,7 @@ Node* expression() {
 
 Node* assign() {
     if(consume_token(TK_INT)) {
+        Type* tp = expect_type();
         Token* tok = consume_identity();
         if(!tok) {
             error_at(token->str, "宣言ミス");
@@ -411,6 +430,7 @@ Node* assign() {
         lvar->name = tok->str;
         lvar->length = tok->length;
         lvar->offset = local->offset+8;
+        lvar->typ = tp;
         node->offset = lvar->offset;
         local = lvar;
         return node;
@@ -539,6 +559,7 @@ Node *primary() {
             LVar* lvar = find_lvar(tok);
             if(lvar) {
                 node->offset = lvar->offset;
+                node->typ = lvar->typ;
             }
             else {
                 error_at(tok->str, "不明な識別子です");
