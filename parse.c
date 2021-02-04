@@ -1,5 +1,14 @@
 #include "frcc.h"
 
+//alternative to strndup
+char* duplicate(char *str, size_t len) {
+    char *buffer = malloc(len + 1);
+    memcpy(buffer, str, len);
+    buffer[len] = '\0';
+
+    return buffer;
+}
+
 Token *token;
 
 void error_at(char *loc, char *fmt, ...) {
@@ -72,9 +81,11 @@ bool at_eof() {
 }
 
 Token *new_token(TokenKind kind, Token *cur, char *str, int length) {
+    char* text = duplicate(str, length);
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
-    tok->str = str;
+    tok->str = text;
+    tok->str_origin = str;
     tok->length = length;
     cur->next = tok;
     return tok;
@@ -172,6 +183,9 @@ void tokenize(char *p) {
 
 //*********構文解析***********
 
+Map *global_variables;
+Map *global_functions;
+
 LVar* local;
 
 LVar* find_lvar(Token* tok) {
@@ -179,6 +193,13 @@ LVar* find_lvar(Token* tok) {
         if(var->length == tok->length && !memcmp(tok->str, var->name, var->length)) {
             return var;
         }
+    }
+    return NULL;
+}
+
+GVar* find_gvar(Token* tok) {
+    if(map_exists(global_variables, tok->str)) {
+        return map_get(global_variables, tok->str);
     }
     return NULL;
 }
@@ -304,11 +325,78 @@ Node* primary(bool u_amp, bool u_sizeof); //::= num
                 // | "(" expression ")"
 
 void program() {
+    global_variables = new_map();
+    global_functions = new_map();
     int i = 0;
     while(!at_eof()) {
-        code[i++] = function();
+        expect_token(TK_INT);
+        Type *tp = expect_type();
+        Token *tk = consume_identity();
+        if(consume("(")) { //関数定義
+            Function* func = calloc(1, sizeof(Function));
+            func->name = tk->str;
+            func->name_length = tk->length;
+            func->locals =  calloc(1, sizeof(LVar));
+            local = func->locals;
+            if(!consume(")")) {
+                expect_token(TK_INT);
+                Type* tp = expect_type();
+                int width = 8;
+       
+                Token* identity = consume_identity();
+                LVar* var = calloc(1, sizeof(LVar));
+                var->name = identity->str;
+                var->length = identity->length;
+                var->offset = local->offset + width;
+                var->next = local;
+                var->typ = tp;
+                local = var;
+                func->arg_size++;
+                while(consume(",")) {
+                    expect_token(TK_INT);
+                    tp = expect_type();
+                    width = 8;
+                    var = calloc(1, sizeof(LVar));
+                    Token* t = consume_identity();
+                    var->name = t->str;
+                    var->length = t->length;
+                    var->offset = local->offset + width;
+                    var->next = local;
+                    var->typ = tp;
+                    local = var;
+                    func->arg_size++;
+                }
+                expect(")");
+            }
+            expect("{");
+            Node* node = calloc(1, sizeof(Node));
+            node->kind = ND_BLOCK;
+            node->stmts = new_vec();
+            for(int i = 0; !consume("}"); i++) {
+                vec_push(node->stmts, stmt());
+            }
+            func->node = node;
+            func->locals = local;
+            map_put(global_functions, func->name, func);
+        }
+        else { //グローバル変数定義
+            int width = 8;
+            if(consume("[")) {
+                Type* type_array = calloc(1, sizeof(Type));
+                type_array->typ = ARRAY;
+                type_array->array_size = expect_number();
+                type_array->ptr_to = tp;
+                tp = type_array;
+                width *= type_array->array_size;
+                expect("]");
+            }
+            GVar *gvar = calloc(1, sizeof(GVar));
+            gvar->name = tk->str;
+            gvar->typ = tp;
+            map_put(global_variables, gvar->name, gvar);
+            expect(";");
+        }
     }
-    code[i] = NULL;
 }
 
 Function* function() {
@@ -677,14 +765,16 @@ Node *primary(bool u_amp, bool u_sizeof) {
             node->kind = ND_FUNCTION_CALL;
             node->str = tok->str;
             node->str_length = tok->length;
+            return node;
         }
         else {
-            node->kind = ND_LVAR;
 
             LVar* lvar = find_lvar(tok);
             if(lvar) {
+                node->kind = ND_LVAR;
                 node->offset = lvar->offset;
                 if(lvar->typ->typ == ARRAY && !u_amp && !u_sizeof) {
+                    node->kind = ND_LVAR_REF;
                     node->typ = calloc(1, sizeof(Type));
                     node->typ->typ = PTR;
                     node->typ->ptr_to = lvar->typ->ptr_to;
@@ -692,12 +782,27 @@ Node *primary(bool u_amp, bool u_sizeof) {
                 else {
                     node->typ = lvar->typ;
                 }
+                return node;
+            }
+            GVar *gvar = find_gvar(tok);
+            if(gvar) {
+                node->kind = ND_GVAR;
+                node->str = tok->str;
+                if(gvar->typ->typ == ARRAY && !u_amp && !u_sizeof) {
+                    node->kind = ND_GVAR_REF;
+                    node->typ = calloc(1, sizeof(Type));
+                    node->typ->typ = PTR;
+                    node->typ->ptr_to = gvar->typ->ptr_to;
+                }
+                else {
+                    node->typ = gvar->typ;
+                }
+                return node;
             }
             else {
                 error_at(tok->str, "不明な識別子です");
             }
         }
-        return node;
     }
     return new_node_num(expect_number());
 }

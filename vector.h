@@ -1,3 +1,6 @@
+#ifndef VECTOR_H
+#define VECTOR_H
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -15,3 +18,5 @@ void* vec_pop(Vector* v);
 void* vec_last(Vector* v);
 bool vec_contains(Vector* v, void* element);
 bool vec_push_union(Vector* v, void* element);
+
+#endif

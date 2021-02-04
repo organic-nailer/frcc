@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "vector.h"
+#include "map.h"
 
 //**********LOG***********
 
@@ -37,6 +38,7 @@ struct Token {
     Token *next;
     int value;
     char *str;
+    char *str_origin;
     int length;
 };
 
@@ -48,6 +50,8 @@ void tokenize(char *p);
 
 //*********構文解析***********
 
+extern Map *global_variables;
+extern Map *global_functions;
 
 typedef struct Type Type;
 
@@ -79,6 +83,9 @@ typedef enum {
     ND_ADDR, //18
     ND_DEREF, //19
     ND_VAR_DEF, //20
+    ND_GVAR, //21
+    ND_LVAR_REF, //22
+    ND_GVAR_REF, //23
 } NodeKind;
 
 typedef struct Node Node;
@@ -117,6 +124,13 @@ struct LVar {
     Type *typ;
 };
 
+typedef struct GVar GVar;
+
+struct GVar {
+    char *name;
+    Type *typ;
+};
+
 typedef struct Function Function;
 
 struct Function {
@@ -131,4 +145,4 @@ extern Function* code[100];
 
 //**********コード生成***********
 
-void gen(Function* func);
+void gen();

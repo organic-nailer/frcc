@@ -2,19 +2,47 @@
 
 void gen_node(Node* node);
 
+//左辺値解釈: 変数のアドレスを積む
 void gen_lval(Node* node) {
-    if(node->kind == ND_DEREF) {
+    if(node->kind == ND_DEREF) { //子の値(つまり参照先のアドレス)を積む
         gen_node(node->left);
         return;
     }
-    if(node->kind == ND_LVAR) {
+    if(node->kind == ND_LVAR 
+    || node->kind == ND_LVAR_REF) { //ローカル変数のアドレスを積む
         printf("mov rax, rbp\n");
         printf("sub rax, %d\n", node->offset);
         printf("push rax\n");
         return;
     }
+    if(node->kind == ND_GVAR 
+    || node->kind == ND_GVAR_REF) { //グローバル変数のアドレスを積む
+        printf("mov rax, offset _%s\n", node->str);
+        printf("push rax\n");
+        return;
+    }
     fprintf(stderr, "代入の左辺値が変数ではありません\n");
     exit(1);
+}
+
+void gen_gvar_dec() {
+    printf("\n.data\n");
+    for(int i = 0; i < global_variables->vals->length; i++) {
+        GVar* gvar = global_variables->vals->data[i];
+        int width;
+        if(gvar->typ->typ == INT) {
+            width = 4;
+        }
+        else if(gvar->typ->typ == PTR) {
+            width = 8;
+        }
+        else if(gvar->typ->typ == ARRAY) {
+            int in_width = gvar->typ->ptr_to->typ == INT ? 4 : 8;
+            width = in_width * gvar->typ->array_size;
+        }
+        printf("_%s:\n", gvar->name);
+        printf(".zero %d\n", width);
+    }
 }
 
 int fit16(int x) {
@@ -29,11 +57,14 @@ void gen_node(Node* node) {
         case ND_NUM:
             printf("push %d\n", node->value);
             return;
-        case ND_LVAR:
+        case ND_LVAR: //変数の値(ポインタならそのアドレス)を積む
             gen_lval(node);
             printf("pop rax\n");
             printf("mov rax, [rax]\n");
             printf("push rax\n");
+            return;
+        case ND_LVAR_REF:
+            gen_lval(node);
             return;
         case ND_ASSIGN:
             gen_lval(node->left);
@@ -145,6 +176,15 @@ void gen_node(Node* node) {
         case ND_VAR_DEF:
             printf("push rax\n"); //無意味だけどスタックになんか残さないといけないので
             return;
+        case ND_GVAR:
+            gen_lval(node);
+            printf("pop rax\n");
+            printf("mov rax, [rax]\n");
+            printf("push rax\n");
+            return;
+        case ND_GVAR_REF:
+            gen_lval(node);
+            return;
     }
 
     gen_node(node->left);
@@ -223,7 +263,7 @@ void gen_node(Node* node) {
     printf("push rax\n");
 }
 
-void gen(Function* func) {
+void gen_function(Function* func) {
     printf("%.*s:\n", func->name_length, func->name);
     printf("push rbp\n");
     printf("mov rbp, rsp\n");
@@ -258,4 +298,17 @@ void gen(Function* func) {
     printf("mov rsp, rbp\n");
     printf("pop rbp\n");
     printf("ret\n");
+}
+
+void gen() {
+    gen_gvar_dec();
+    
+    printf("\n.text\n");
+    printf(".intel_syntax noprefix\n");
+    printf(".globl main\n");
+    for(int i = 0; i < global_functions->vals->length; i++) {
+        Function *func = global_functions->vals->data[i];
+        gen_function(func);
+        printf("pop rax\n");
+    }
 }

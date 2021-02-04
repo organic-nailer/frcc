@@ -27,9 +27,10 @@ int main(int argc, char **argv) {
     log_print("\n");
     program();
     log_print("parsed\n");
-    for(int i = 0; code[i]; i++) {
-        print_node(code[i]->node, 0);
-        LVar* loc = code[i]->locals;
+    for(int i = 0; i < global_functions->vals->length; i++) {
+        Function* func = global_functions->vals->data[i];
+        print_node(func->node, 0);
+        LVar* loc = func->locals;
         while(loc) {
             log_print("%.*s :%d\n", loc->length, loc->name, loc->offset);
             loc = loc->next;
@@ -38,11 +39,6 @@ int main(int argc, char **argv) {
     log_print("\n\n");
     close_logger();
 
-    printf(".intel_syntax noprefix\n");
-    printf(".globl main\n");
-    for(int i =0; code[i]; i++) {
-        gen(code[i]);
-        printf("pop rax\n");
-    }
+    gen();
     return 0;
 }
