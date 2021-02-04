@@ -9,6 +9,15 @@ char* duplicate(char *str, size_t len) {
     return buffer;
 }
 
+char *format(char *fmt, ...) {
+  char buf[2048];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  return duplicate(buf, sizeof(buf));
+}
+
 Token *token;
 
 void error_at(char *loc, char *fmt, ...) {
@@ -47,6 +56,15 @@ Token* consume_identity() {
         return NULL;
     }
     Token* ret = token;
+    token = token->next;
+    return ret;
+}
+
+Token* consume_literal() {
+    if(token->kind != TK_STRING) {
+        return NULL;
+    }
+    Token *ret = token;
     token = token->next;
     return ret;
 }
@@ -180,6 +198,19 @@ void tokenize(char *p) {
             cur->value = strtol(p, &p, 10);
             continue;
         }
+        if(*p == '"') {
+            *p++;
+            int str_length = 0;
+            char *cp = p;
+            while(*cp != '"') {
+                str_length++;
+                cp++;
+            }
+            cur = new_token(TK_STRING, cur, p, str_length);
+            p += str_length;
+            p++;
+            continue;
+        }
         error_at(p, "tokenize出来ません");
     }
     new_token(TK_EOF, cur, p, 0);
@@ -190,6 +221,7 @@ void tokenize(char *p) {
 
 Map *global_variables;
 Map *global_functions;
+Vector *literals;
 
 LVar* local;
 
@@ -355,10 +387,12 @@ Node* postfix(bool u_amp, bool u_sizeof); //::= primary ("[" expression "]")?
 Node* primary(bool u_amp, bool u_sizeof); //::= num 
                 // | identity ( "(" ( expression ( "," expression )* )? ")" )?
                 // | "(" expression ")"
+                // | literal
 
 void program() {
     global_variables = new_map();
     global_functions = new_map();
+    literals = new_vec();
     int i = 0;
     while(!at_eof()) {
         Type *tp = consume_type();
@@ -822,6 +856,32 @@ Node *primary(bool u_amp, bool u_sizeof) {
                 error_at(tok->str, "不明な識別子です");
             }
         }
+    }
+    tok = consume_literal();
+    if(tok) {
+        int lit_index = vec_index_of(literals, tok->str);
+        if(lit_index < 0) {
+            vec_push(literals, tok->str);
+            lit_index = literals->length - 1;
+        }
+        Node* node = calloc(1, sizeof(Node));
+        node->str = format("LIT%d", lit_index);
+        if(!u_amp && !u_sizeof) {
+            node->kind = ND_GVAR_REF;
+            node->typ = calloc(1, sizeof(Type));
+            node->typ->typ = PTR;
+            node->typ->ptr_to = calloc(1, sizeof(Type));
+            node->typ->ptr_to->typ = CHAR;
+        }
+        else {
+            node->kind = ND_GVAR;
+            node->typ = calloc(1, sizeof(Type));
+            node->typ->typ = ARRAY;
+            node->typ->ptr_to = calloc(1, sizeof(Type));
+            node->typ->ptr_to->typ = CHAR;
+            node->typ->array_size = tok->length;
+        }
+        return node;
     }
     return new_node_num(expect_number());
 }

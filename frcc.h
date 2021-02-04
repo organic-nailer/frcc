@@ -30,6 +30,7 @@ typedef enum {
     TK_INT,
     TK_CHAR,
     TK_SIZEOF,
+    TK_STRING,
 } TokenKind;
 
 typedef struct Token Token;
@@ -53,6 +54,7 @@ void tokenize(char *p);
 
 extern Map *global_variables;
 extern Map *global_functions;
+extern Vector *literals;
 
 typedef enum {
     INT, PTR, ARRAY, CHAR

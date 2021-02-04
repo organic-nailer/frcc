@@ -17,7 +17,7 @@ void gen_lval(Node* node) {
     }
     if(node->kind == ND_GVAR 
     || node->kind == ND_GVAR_REF) { //グローバル変数のアドレスを積む
-        printf("mov rax, offset _%s\n", node->str);
+        printf("mov rax, offset .%s\n", node->str);
         printf("push rax\n");
         return;
     }
@@ -26,7 +26,6 @@ void gen_lval(Node* node) {
 }
 
 void gen_gvar_dec() {
-    printf("\n.data\n");
     for(int i = 0; i < global_variables->vals->length; i++) {
         GVar* gvar = global_variables->vals->data[i];
         int width;
@@ -40,8 +39,16 @@ void gen_gvar_dec() {
             int in_width = gvar->typ->ptr_to->typ == INT ? 4 : 8;
             width = in_width * gvar->typ->array_size;
         }
-        printf("_%s:\n", gvar->name);
+        printf(".%s:\n", gvar->name);
         printf(".zero %d\n", width);
+    }
+}
+
+void gen_string_literal_dec() {
+    for(int i = 0; i < literals->length; i++) {
+        char *c = literals->data[i];
+        printf(".LIT%d:\n", i);
+        printf(".string \"%s\"\n", c);
     }
 }
 
@@ -333,7 +340,9 @@ void gen_function(Function* func) {
 }
 
 void gen() {
+    printf("\n.data\n");
     gen_gvar_dec();
+    gen_string_literal_dec();
     
     printf("\n.text\n");
     printf(".intel_syntax noprefix\n");

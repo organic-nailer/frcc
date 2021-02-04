@@ -17,6 +17,7 @@ void vec_push_i(Vector* v, int value);
 void* vec_pop(Vector* v);
 void* vec_last(Vector* v);
 bool vec_contains(Vector* v, void* element);
+int vec_index_of(Vector* v, void* element);
 bool vec_push_union(Vector* v, void* element);
 
 #endif

@@ -37,6 +37,15 @@ bool vec_contains(Vector* v, void* element) {
     return false;
 }
 
+int vec_index_of(Vector* v, void* element) {
+    for(int i = 0; i < v->length; i++) {
+        if(v->data[i] == element) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 bool vec_push_union(Vector* v, void* element) {
     if(vec_contains(v, element)) {
         return false;
