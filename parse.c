@@ -154,6 +154,11 @@ void tokenize(char *p) {
             p += 3;
             continue;
         }
+        if(strncmp(p, "char", 4) == 0 && !is_alnum(p[4])) {
+            cur = new_token(TK_CHAR, cur, p, 4);
+            p += 4;
+            continue;
+        }
         if(strncmp(p, "sizeof", 6) == 0 && !is_alnum(p[6])) {
             cur = new_token(TK_SIZEOF, cur, p, 6);
             p += 6;
@@ -204,10 +209,10 @@ GVar* find_gvar(Token* tok) {
     return NULL;
 }
 
-Type* expect_type() {
+Type* expect_type(TypeKind kind) {
     Type* ret = calloc(1, sizeof(Type));
     Type* tp = calloc(1, sizeof(Type));
-    tp->typ = INT;
+    tp->typ = kind;
     ret = tp;
     while(consume("*")) {
         tp = calloc(1, sizeof(Type));
@@ -216,6 +221,32 @@ Type* expect_type() {
         ret = tp;
     }
     return ret;
+}
+
+Type* consume_type() {
+    if(consume_token(TK_INT)) {
+        return expect_type(INT);
+    }
+    if(consume_token(TK_CHAR)) {
+        return expect_type(CHAR);
+    }
+    return NULL;
+}
+
+int type_width(Type *t) {
+    if(t->typ == INT) {
+        return 4;
+    }
+    if(t->typ == CHAR) {
+        return 1;
+    }
+    if(t->typ == PTR) {
+        return 8;
+    }
+    if(t->typ == ARRAY) {
+        return type_width(t->ptr_to) * t->array_size;
+    }
+    error_at(token->str_origin, "不明な型です: %d", t->typ);
 }
 
 Node *new_node(NodeKind kind, Node *left, Node *right) {
@@ -299,8 +330,9 @@ void print_node(Node* node, int indent) {
 Function* code[100];
 
 //program ::= function*
+//type ::= ("int" | "char") "*"*
 Function* function(); //::= 
-        //"int" "*"* identity "(" ( "int" "*"* identity, ( "," "int" "*"* identity )* )? ")" "{" stmt* "}"
+        //type identity "(" ( type identity, ( "," type identity )* )? ")" "{" stmt* "}"
 Node* stmt(); //::= expression ";" 
             // | "{" stmt* "}"
             // | "return" expression ";"
@@ -309,7 +341,7 @@ Node* stmt(); //::= expression ";"
             // | "for" "(" expression? ";" expression? ";" expression? ")" stmt
 Node* expression(); //::= assign
 Node* assign(); //::= equality ( "=" assign)?
-                // | "int" "*"* identity ("[" num "]")?
+                // | type identity ("[" num "]")?
 Node* equality(); //::= relational ("==" relational | "!=" relational)*
 Node* relational(); //::= add ("<" add | "<=" add | ">" add | ">=" add)*
 Node* add(); //::= mul ( "+" mul | "-" mul )*
@@ -329,8 +361,7 @@ void program() {
     global_functions = new_map();
     int i = 0;
     while(!at_eof()) {
-        expect_token(TK_INT);
-        Type *tp = expect_type();
+        Type *tp = consume_type();
         Token *tk = consume_identity();
         if(consume("(")) { //関数定義
             Function* func = calloc(1, sizeof(Function));
@@ -339,8 +370,7 @@ void program() {
             func->locals =  calloc(1, sizeof(LVar));
             local = func->locals;
             if(!consume(")")) {
-                expect_token(TK_INT);
-                Type* tp = expect_type();
+                Type* tp = consume_type();
                 int width = 8;
        
                 Token* identity = consume_identity();
@@ -353,8 +383,7 @@ void program() {
                 local = var;
                 func->arg_size++;
                 while(consume(",")) {
-                    expect_token(TK_INT);
-                    tp = expect_type();
+                    tp = consume_type();
                     width = 8;
                     var = calloc(1, sizeof(LVar));
                     Token* t = consume_identity();
@@ -399,57 +428,57 @@ void program() {
     }
 }
 
-Function* function() {
-    expect_token(TK_INT);
-    Token* tok = consume_identity();
-    if(!tok) error_at(tok->str, "トップレベルは関数が必要です");
-    Function* func = calloc(1, sizeof(Function));
-    func->name = tok->str;
-    func->name_length = tok->length;
-    expect("(");
-    func->locals =  calloc(1, sizeof(LVar));
-    local = func->locals;
-    if(!consume(")")) {
-        expect_token(TK_INT);
-        Type* tp = expect_type();
-        int width = 8;
+// Function* function() {
+//     expect_token(TK_INT);
+//     Token* tok = consume_identity();
+//     if(!tok) error_at(tok->str, "トップレベルは関数が必要です");
+//     Function* func = calloc(1, sizeof(Function));
+//     func->name = tok->str;
+//     func->name_length = tok->length;
+//     expect("(");
+//     func->locals =  calloc(1, sizeof(LVar));
+//     local = func->locals;
+//     if(!consume(")")) {
+//         expect_token(TK_INT);
+//         Type* tp = expect_type();
+//         int width = 8;
        
-        Token* identity = consume_identity();
-        LVar* var = calloc(1, sizeof(LVar));
-        var->name = identity->str;
-        var->length = identity->length;
-        var->offset = local->offset + width;
-        var->next = local;
-        var->typ = tp;
-        local = var;
-        func->arg_size++;
-        while(consume(",")) {
-            expect_token(TK_INT);
-            tp = expect_type();
-            width = 8;
-            var = calloc(1, sizeof(LVar));
-            Token* t = consume_identity();
-            var->name = t->str;
-            var->length = t->length;
-            var->offset = local->offset + width;
-            var->next = local;
-            var->typ = tp;
-            local = var;
-            func->arg_size++;
-        }
-        expect(")");
-    }
-    expect("{");
-    Node* node = calloc(1, sizeof(Node));
-    node->kind = ND_BLOCK;
-    node->stmts = new_vec();
-    for(int i = 0; !consume("}"); i++) {
-        vec_push(node->stmts, stmt());
-    }
-    func->node = node;
-    func->locals = local;
-    return func;
-}
+//         Token* identity = consume_identity();
+//         LVar* var = calloc(1, sizeof(LVar));
+//         var->name = identity->str;
+//         var->length = identity->length;
+//         var->offset = local->offset + width;
+//         var->next = local;
+//         var->typ = tp;
+//         local = var;
+//         func->arg_size++;
+//         while(consume(",")) {
+//             expect_token(TK_INT);
+//             tp = expect_type();
+//             width = 8;
+//             var = calloc(1, sizeof(LVar));
+//             Token* t = consume_identity();
+//             var->name = t->str;
+//             var->length = t->length;
+//             var->offset = local->offset + width;
+//             var->next = local;
+//             var->typ = tp;
+//             local = var;
+//             func->arg_size++;
+//         }
+//         expect(")");
+//     }
+//     expect("{");
+//     Node* node = calloc(1, sizeof(Node));
+//     node->kind = ND_BLOCK;
+//     node->stmts = new_vec();
+//     for(int i = 0; !consume("}"); i++) {
+//         vec_push(node->stmts, stmt());
+//     }
+//     func->node = node;
+//     func->locals = local;
+//     return func;
+// }
 
 Node* stmt() {
     Node* node;
@@ -521,8 +550,8 @@ Node* expression() {
 }
 
 Node* assign() {
-    if(consume_token(TK_INT)) {
-        Type* tp = expect_type();
+    Type *tp = consume_type();
+    if(tp) {
         Token* tok = consume_identity();
         if(!tok) {
             error_at(token->str, "宣言ミス");
@@ -605,40 +634,62 @@ Node* relational() {
     }
 }
 
+Type *parent_type(char op, Type *left, Type *right) {
+    if(op == '+') {
+        if(left->typ == PTR && right->typ == PTR) {
+            error_at(token->str_origin, "ポインタ同士の演算は無効です");
+        }
+        if(left->typ == PTR) return left;
+        if(right->typ == PTR) return right;
+        if(left->typ == CHAR && right->typ == CHAR) return left;
+        Type *ret_int = calloc(1, sizeof(Type));
+        ret_int->typ = INT;
+        return ret_int;
+    }
+    if(op == '-') {
+        if(left->typ == PTR && right->typ == PTR) {
+            error_at(token->str_origin, "ポインタ同士の演算は無効です");
+        }
+        if(left->typ == PTR) return left;
+        if(right->typ == PTR) {
+            error_at(token->str, "マイナスの右辺にポインタ");
+        }
+        if(left->typ == CHAR && right->typ == CHAR) return left;
+        Type *ret_int = calloc(1, sizeof(Type));
+        ret_int->typ = INT;
+        return ret_int;
+    }
+    if(op == '*' || op == '/') {
+        if(left->typ == PTR || right->typ == PTR) {
+            error_at(token->str, "無効な演算");
+        }
+        if(left->typ == CHAR && right->typ == CHAR) return left;
+        Type *ret_int = calloc(1, sizeof(Type));
+        ret_int->typ = INT;
+        return ret_int;
+    }
+    if(op == '[') {
+        if(left->typ == PTR && right->typ == PTR) {
+            error_at(token->str_origin, "ポインタ同士の演算は無効です");
+        }
+        if(left->typ == PTR) return left;
+        if(right->typ == PTR) return right;
+        error_at(token->str, "[]内外のどちらかはポインタの必要が");
+    }
+    error_at(token->str, "不明な演算子 %c", op);
+}
+
 Node *add() {
     Node *node = mul();
 
     for(;;) {
         if(consume("+")) {
             node = new_node(ND_ADD, node, mul());
-            node->typ = calloc(1, sizeof(Type));
-            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
-                node->typ->typ = INT;
-            }
-            else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
-                error_at(token->str, "ポインタ同士の演算は無効です");
-            }
-            else if(node->left->typ->typ == PTR) {
-                node->typ = node->left->typ;
-            }
-            else if(node->right->typ->typ = PTR) {
-                node->typ = node->right->typ;
-            }
+            node->typ = parent_type('+',node->left->typ, node->right->typ);
         }
         else if(consume("-")) {
             node = new_node(ND_SUB, node, mul());
-            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
-                node->typ->typ = INT;
-            }
-            else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
-                error_at(token->str, "ポインタ同士の演算は無効です");
-            }
-            else if(node->left->typ->typ == PTR) {
-                node->typ = node->left->typ;
-            }
-            else if(node->right->typ->typ = PTR) {
-                error_at(token->str, "マイナスの右辺にポインタ");
-            }
+            node->typ = parent_type('-',node->left->typ,node->right->typ);
         }
         else {
             return node;
@@ -651,21 +702,11 @@ Node *mul() {
     for(;;) {
         if(consume("*")) {
             node = new_node(ND_MUL, node, unary(false, false));
-            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
-                node->typ->typ = INT;
-            }
-            else {
-                error_at(token->str, "無効な演算");
-            }
+            node->typ = parent_type('*',node->left->typ,node->right->typ);
         }
         else if(consume("/")) {
             node = new_node(ND_DIV, node, unary(false, false));
-            if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
-                node->typ->typ = INT;
-            }
-            else {
-                error_at(token->str, "無効な演算");
-            }
+            node->typ = parent_type('/',node->left->typ,node->right->typ);
         }
         else {
             return node;
@@ -701,17 +742,7 @@ Node *unary(bool u_amp, bool u_sizeof) {
     }
     if(consume_token(TK_SIZEOF)) {
         Node* node = unary(false, true);
-        int width;
-        if(node->typ->typ == INT) {
-            width = 4;
-        }
-        else if(node->typ->typ == PTR) {
-            width = 8;
-        }
-        else if(node->typ->typ == ARRAY) {
-            int in_width = node->typ->ptr_to->typ == INT ? 4 : 8;
-            width = in_width * node->typ->array_size;
-        }
+        int width = type_width(node->typ);
         return new_node_num(width);
     }
     return postfix(u_amp, u_sizeof);
@@ -721,19 +752,7 @@ Node *postfix(bool u_amp, bool u_sizeof) {
     Node *left = primary(u_amp, u_sizeof);
     if(consume("[")) {
         Node *node = new_node(ND_ADD, left, expression());
-        node->typ = calloc(1, sizeof(Type));
-        if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
-            error_at(token->str, "[]内外のどちらかはポインタの必要が");
-        }
-        else if(node->left->typ->typ == PTR && node->right->typ->typ == PTR) {
-            error_at(token->str, "ポインタ同士の演算は無効です");
-        }
-        else if(node->left->typ->typ == PTR) {
-            node->typ = node->left->typ;
-        }
-        else if(node->right->typ->typ = PTR) {
-            node->typ = node->right->typ;
-        }
+        node->typ = parent_type('[',node->left->typ,node->right->typ);
         Node *node2 = calloc(1, sizeof(Node));
         node2->kind = ND_DEREF;
         node2->left = node;

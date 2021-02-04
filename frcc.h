@@ -28,6 +28,7 @@ typedef enum {
     TK_FOR,
     TK_EOF,
     TK_INT,
+    TK_CHAR,
     TK_SIZEOF,
 } TokenKind;
 
@@ -53,10 +54,14 @@ void tokenize(char *p);
 extern Map *global_variables;
 extern Map *global_functions;
 
+typedef enum {
+    INT, PTR, ARRAY, CHAR
+} TypeKind;
+
 typedef struct Type Type;
 
 struct Type {
-    enum { INT, PTR, ARRAY } typ;
+    TypeKind typ;
     struct Type *ptr_to;
     size_t array_size;
 };

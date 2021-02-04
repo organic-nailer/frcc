@@ -88,5 +88,6 @@ assert 1 "int a[2]; int main() {*a=1; return 1; }"
 assert 1 "int a[2]; int main() {*a=1; return *a; }"
 assert 1 "int a[2]; int main() {*a=1; *(a+1)=2; return *a; }"
 assert 3 "int a[2]; int main() {*a=1; *(a+1)=2; int *p; p=a; return *p+*(p+1);}"
+assert 5 "int main() { char x[3]; x[0]=1; x[1]=2; int y; y=4; return x[0]+y; }"
 
 echo OK

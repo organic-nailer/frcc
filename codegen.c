@@ -59,9 +59,16 @@ void gen_node(Node* node) {
             return;
         case ND_LVAR: //変数の値(ポインタならそのアドレス)を積む
             gen_lval(node);
-            printf("pop rax\n");
-            printf("mov rax, [rax]\n");
-            printf("push rax\n");
+            if(node->typ->typ == CHAR) {
+                printf("pop rax\n");
+                printf("movzx rax, BYTE PTR [rax]\n");
+                printf("push rax\n");
+            }
+            else {
+                printf("pop rax\n");
+                printf("mov rax, [rax]\n");
+                printf("push rax\n");
+            }
             return;
         case ND_LVAR_REF:
             gen_lval(node);
@@ -69,10 +76,18 @@ void gen_node(Node* node) {
         case ND_ASSIGN:
             gen_lval(node->left);
             gen_node(node->right);
-            printf("pop rdi\n");
-            printf("pop rax\n");
-            printf("mov [rax], rdi\n");
-            printf("push rdi\n");
+            if(node->left->typ->typ == CHAR) {
+                printf("pop rdi\n");
+                printf("pop rax\n");
+                printf("mov [rax], dil\n"); //RDIの8bitレジスタはDIL
+                printf("push rdi\n");
+            }
+            else {
+                printf("pop rdi\n");
+                printf("pop rax\n");
+                printf("mov [rax], rdi\n");
+                printf("push rdi\n");
+            }
             return;
         case ND_RETURN:
             gen_node(node->left);
@@ -169,18 +184,32 @@ void gen_node(Node* node) {
             return;
         case ND_DEREF:
             gen_node(node->left);
-            printf("pop rax\n");
-            printf("mov rax, [rax]\n");
-            printf("push rax\n");
+            if(node->left->typ->typ == CHAR) {
+                printf("pop rax\n");
+                printf("movzx rax, BYTE PTR [rax]\n");
+                printf("push rax\n");
+            }
+            else {
+                printf("pop rax\n");
+                printf("mov rax, [rax]\n");
+                printf("push rax\n");
+            }
             return;
         case ND_VAR_DEF:
             printf("push rax\n"); //無意味だけどスタックになんか残さないといけないので
             return;
         case ND_GVAR:
             gen_lval(node);
-            printf("pop rax\n");
-            printf("mov rax, [rax]\n");
-            printf("push rax\n");
+            if(node->typ->typ == CHAR) {
+                printf("pop rax\n");
+                printf("movzx rax, BYTE PTR [rax]\n");
+                printf("push rax\n");
+            }
+            else {
+                printf("pop rax\n");
+                printf("mov rax, [rax]\n");
+                printf("push rax\n");
+            }
             return;
         case ND_GVAR_REF:
             gen_lval(node);
@@ -193,7 +222,8 @@ void gen_node(Node* node) {
     printf("pop rdi\n");
     printf("pop rax\n");
 
-    if(node->left->typ->typ == INT && node->right->typ->typ == INT) {
+    if((node->left->typ->typ == INT || node->left->typ->typ == CHAR) 
+    && (node->right->typ->typ == INT||node->right->typ->typ == CHAR)) {
         switch(node->kind) {
             case ND_ADD:
                 printf("add rax, rdi\n");
@@ -230,7 +260,8 @@ void gen_node(Node* node) {
                 break;
         }
     }
-    else if(node->left->typ->typ == INT && node->right->typ->typ == PTR) {
+    else if((node->left->typ->typ == INT || node->left->typ->typ == CHAR) 
+    && node->right->typ->typ == PTR) {
         int width = node->right->typ->ptr_to->typ == INT ? 4 : 8;
         if(node->kind == ND_ADD) {
             printf("imul rax, %d\n", width);
@@ -241,7 +272,8 @@ void gen_node(Node* node) {
             exit(1);
         }
     }
-    else if(node->left->typ->typ == PTR && node->right->typ->typ == INT) {
+    else if(node->left->typ->typ == PTR 
+    && (node->right->typ->typ == INT || node->right->typ->typ == CHAR)) {
         int width = node->left->typ->ptr_to->typ == INT ? 4 : 8;
         if(node->kind == ND_ADD) {
             printf("imul rdi, %d\n", width);
