@@ -93,5 +93,6 @@ assert() {
 
 assert 1 "./tests/a.c"
 assert 5 "./tests/b.c"
+assert 5 "./tests/c.c"
 
 echo OK
