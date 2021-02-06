@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <string.h>
+#include <errno.h>
 
 #include "vector.h"
 #include "map.h"
@@ -13,6 +14,8 @@
 void open_logger();
 void close_logger();
 void log_print(char* fmt, ...);
+
+extern char *filename;
 
 //**********字句解析*******
 

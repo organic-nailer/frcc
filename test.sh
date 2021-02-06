@@ -89,6 +89,9 @@ assert() {
 # assert 1 "int a[2]; int main() {*a=1; *(a+1)=2; return *a; }"
 # assert 3 "int a[2]; int main() {*a=1; *(a+1)=2; int *p; p=a; return *p+*(p+1);}"
 # assert 5 "int main() { char x[3]; x[0]=1; x[1]=2; int y; y=4; return x[0]+y; }"
-assert 97 "int main() { char *x; x = \"abc\"; return x[0]; }"
+# assert 97 "int main() { char *x; x = \"abc\"; return x[0]; }"
+
+assert 1 "./tests/a.c"
+assert 5 "./tests/b.c"
 
 echo OK
